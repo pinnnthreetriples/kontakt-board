@@ -38,6 +38,10 @@ import { useClock } from '../../shared/lib/useClock';
 import { hasPersistentStorage } from '../../shared/lib/storage';
 import { Toast } from '../../shared/ui/Toast';
 
+// Уведомления о состоянии висят дольше обычных: в них есть кнопка действия,
+// и на её прочтение нужно время.
+const STATE_NOTICE_MS = 12_000;
+
 const navigation = [
   { to: '/board', label: 'Канбан', icon: DashboardOutlined },
   { to: '/calls', label: 'Звонки', icon: CalendarTodayOutlined },
@@ -145,14 +149,16 @@ export function AppShell() {
           <Outlet />
         </Box>
       </Box>
-      {/* Тосты показываются по одному: у Snackbar общий якорь, и одновременные уведомления перекрыли бы друг друга. */}
+      {/* Тосты показываются по одному: у Snackbar общий якорь, и одновременные уведомления перекрыли бы друг друга.
+          Уведомления о состоянии тоже скрываются сами: висящий тост занимал бы угол и перекрывал сообщения о действиях.
+          Закрытие запоминается на сессию, предупреждение вернётся при следующем запуске. */}
       {shellMessage ? (
         <Toast open severity={shellMessage.startsWith('Не удалось') ? 'error' : 'success'} message={shellMessage} onClose={() => setShellMessage('')} />
       ) : storageNotice ? (
         <Toast
           open
           severity="warning"
-          autoHideDuration={null}
+          autoHideDuration={STATE_NOTICE_MS}
           message={!storagePersistent ? 'Браузер может очистить данные приложения' : 'Резервная копия старше недели'}
           onClose={() => setStorageNoticeClosed(true)}
           action={<Button size="small" color="inherit" disabled={backupBusy} onClick={() => void downloadBackup()}>{backupBusy ? 'Скачивание…' : 'Скачать копию'}</Button>}
@@ -161,7 +167,7 @@ export function AppShell() {
         <Toast
           open
           severity={overdueCount > 0 ? 'error' : 'info'}
-          autoHideDuration={null}
+          autoHideDuration={STATE_NOTICE_MS}
           message={overdueCount > 0 ? `Просрочено звонков: ${overdueCount}` : `Скоро звонков: ${notificationCount}`}
           onClose={() => setDismissedCallsCount(notificationCount)}
           action={<Button size="small" color="inherit" onClick={() => { void navigate('/calls'); }}>Открыть</Button>}
