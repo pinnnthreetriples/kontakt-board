@@ -31,7 +31,7 @@ export const tokens = {
     tagDot: 10, tagMenu: 240,
     reportIcon: 42, progressBar: 8, emptyIcon: 40, uploadIcon: 48, successIcon: 56, scrollbar: 10, excelColumn: 22,
     pipelineStep: 96, pipelineDot: 18, pipelineRing: 28, pipelineLine: 2,
-    appLoader: 300, chatViewport: 420, chatBubbleMax: '78%', zero: 0, full: '100%', viewport: '100vh', boardViewport: 'calc(100vh - 170px)', contactsViewport: 'calc(100vh - 180px)',
+    appLoader: 300, chatViewport: 420, chatBubbleMax: '78%', qrCode: 220, zero: 0, full: '100%', viewport: '100vh', boardViewport: 'calc(100vh - 170px)', contactsViewport: 'calc(100vh - 180px)',
   },
   inset: { cardAction: 8, navigationFooter: 20 },
   iconSize: { small: '1rem', compact: '0.9375rem' },

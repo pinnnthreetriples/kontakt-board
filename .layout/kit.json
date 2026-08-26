@@ -5,8 +5,8 @@
   "description": "Material Design via Material UI v7 on top of src/shared/design-system (theme.ts + tokens.ts).",
   "source": "manual",
   "tier": "free",
-  "tokenCount": 117,
-  "componentCount": 111,
+  "tokenCount": 118,
+  "componentCount": 117,
   "aesthetic": "Dense, calm, operational. Light palette, one blue accent, hairline separators, minimal elevation.",
   "check": {
     "exclude": []
