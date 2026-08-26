@@ -1,0 +1,57 @@
+name: quality
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Токен только на чтение: воркфлоу ничего не публикует.
+permissions:
+  contents: read
+
+# Новый пуш в ту же ветку отменяет предыдущий прогон.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: типы, линтеры, тесты, сборка
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: quality (typecheck, lint, размеры файлов, токены, дизайн-система, покрытие, сборка)
+        run: npm run quality
+      - name: aislop, строгий конфиг
+        run: npm run check:aislop
+      - name: knip, мёртвый код и лишние зависимости
+        run: npm run check:deps
+      - name: аудит зависимостей
+        run: npm audit --audit-level=high
+
+  e2e:
+    name: сквозные тесты и доступность
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - name: отчёт Playwright при падении
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7

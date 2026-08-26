@@ -1,0 +1,148 @@
+version: 1
+
+engines:
+  format: true
+  lint: true
+  code-quality: true
+  ai-slop: true
+  security: true
+  architecture: true
+
+lint:
+  typecheck: true
+  expoDoctor: false
+
+security:
+  audit: true
+  auditTimeout: 60000
+
+quality:
+  maxFunctionLoc: 80
+  maxFileLoc: 350
+  maxNesting: 5
+  maxParams: 6
+
+scoring:
+  thresholds:
+    good: 100
+    ok: 90
+
+ci:
+  failBelow: 100
+  format: json
+
+# Every rule that can fire on a TypeScript/React project is raised to `error`.
+# `aislop ci` exits 1 on any error, so this makes the gate zero-tolerance.
+# Rule ids are matched exactly (no wildcards), so language-specific rules for
+# Python/Go/Rust/C#/C++ are omitted: they cannot fire here.
+rules:
+  # --- AI slop -------------------------------------------------------------
+  ai-slop/console-leftover: error
+  ai-slop/constant-condition: error
+  ai-slop/double-type-assertion: error
+  ai-slop/duplicate-import: error
+  ai-slop/duplicate-type-declaration: error
+  ai-slop/empty-function: error
+  ai-slop/generic-naming: error
+  ai-slop/hallucinated-import: error
+  ai-slop/hardcoded-id: error
+  ai-slop/hardcoded-url: error
+  ai-slop/hidden-fallback: error
+  ai-slop/meta-comment: error
+  ai-slop/narrative-comment: error
+  ai-slop/redundant-try-catch: error
+  ai-slop/redundant-type-coercion: error
+  ai-slop/silent-recovery: error
+  ai-slop/swallowed-exception: error
+  ai-slop/tautological-test: error
+  ai-slop/thin-wrapper: error
+  ai-slop/todo-stub: error
+  ai-slop/trivial-comment: error
+  ai-slop/ts-directive: error
+  ai-slop/unreachable-code: error
+  ai-slop/unsafe-type-assertion: error
+  ai-slop/unused-css: error
+  ai-slop/unused-import: error
+
+  # --- Code quality / complexity ------------------------------------------
+  code-quality/duplicate-block: error
+  code-quality/repeated-chained-call: error
+  code-quality/unused-declaration: error
+  complexity/deep-nesting: error
+  complexity/file-too-large: error
+  complexity/function-too-long: error
+  complexity/too-many-params: error
+
+  # --- Dead code and manifest hygiene (knip) -------------------------------
+  knip/binaries: error
+  knip/dependencies: error
+  knip/devDependencies: error
+  knip/duplicates: error
+  knip/exports: error
+  knip/files: error
+  knip/types: error
+  knip/unlisted: error
+  knip/unresolved: error
+
+  # --- Formatting ----------------------------------------------------------
+  formatting: error
+  import-order: error
+
+  # --- Lint (oxlint) -------------------------------------------------------
+  eslint/no-constant-binary-expression: error
+  eslint/no-constant-condition: error
+  eslint/no-debugger: error
+  eslint/no-empty: error
+  eslint/no-extra-boolean-cast: error
+  eslint/no-irregular-whitespace: error
+  eslint/no-loss-of-precision: error
+  eslint/no-shadow-restricted-names: error
+  eslint/no-unassigned-vars: error
+  eslint/no-undef: error
+  eslint/no-unreachable: error
+  eslint/no-unsafe-optional-chaining: error
+  eslint/no-unused-expressions: error
+  eslint/no-unused-vars: error
+  eslint/no-useless-escape: error
+  eslint/require-yield: error
+  eslint/syntax-error: error
+  import/default: error
+  import/named: error
+  import/namespace: error
+  import/no-duplicates: error
+  jsx-a11y/no-aria-hidden-on-focusable: error
+  react/no-direct-mutation-state: error
+  react-hooks/exhaustive-deps: error
+  react-hooks/rules-of-hooks: error
+  unicorn/no-empty-file: error
+  unicorn/no-invalid-remove-event-listener: error
+  unicorn/no-new-array: error
+  unicorn/no-single-promise-in-promise-methods: error
+  unicorn/no-unnecessary-await: error
+  unicorn/no-useless-fallback-in-spread: error
+  unicorn/no-useless-length-check: error
+  unicorn/no-useless-spread: error
+  unicorn/prefer-string-starts-ends-with: error
+
+  # --- Security ------------------------------------------------------------
+  security/dangerously-set-innerhtml: error
+  security/eval: error
+  security/hardcoded-secret: error
+  security/innerhtml: error
+  security/shell-injection: error
+  security/sql-injection: error
+  security/unsafe-deserialization: error
+  security/vulnerable-dependency: error
+  # security/dependency-audit-skipped stays at its default `info`: aislop spawns
+  # bare `npm` without a shell, which is always ENOENT on Windows, so this can
+  # never be satisfied from the project side. Not disabled, just not promoted.
+
+exclude:
+  - node_modules
+  - .git
+  - dist
+  - build
+  - coverage
+  - .npm-cache
+  - .playwright
+  - .aislop-state

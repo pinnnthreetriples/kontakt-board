@@ -1,0 +1,82 @@
+# FSD layering: app -> pages -> widgets -> features -> entities -> shared.
+# A lower layer never imports a higher one (AGENTS.md).
+rules:
+  - name: shared-no-app
+    type: forbid_import_from_path
+    from: "src/shared/**"
+    forbid: "**/app/**"
+    severity: error
+  - name: shared-no-pages
+    type: forbid_import_from_path
+    from: "src/shared/**"
+    forbid: "**/pages/**"
+    severity: error
+  - name: shared-no-widgets
+    type: forbid_import_from_path
+    from: "src/shared/**"
+    forbid: "**/widgets/**"
+    severity: error
+  - name: shared-no-features
+    type: forbid_import_from_path
+    from: "src/shared/**"
+    forbid: "**/features/**"
+    severity: error
+  - name: shared-no-entities
+    type: forbid_import_from_path
+    from: "src/shared/**"
+    forbid: "**/entities/**"
+    severity: error
+
+  - name: entities-no-app
+    type: forbid_import_from_path
+    from: "src/entities/**"
+    forbid: "**/app/**"
+    severity: error
+  - name: entities-no-pages
+    type: forbid_import_from_path
+    from: "src/entities/**"
+    forbid: "**/pages/**"
+    severity: error
+  - name: entities-no-widgets
+    type: forbid_import_from_path
+    from: "src/entities/**"
+    forbid: "**/widgets/**"
+    severity: error
+  - name: entities-no-features
+    type: forbid_import_from_path
+    from: "src/entities/**"
+    forbid: "**/features/**"
+    severity: error
+
+  - name: features-no-app
+    type: forbid_import_from_path
+    from: "src/features/**"
+    forbid: "**/app/**"
+    severity: error
+  - name: features-no-pages
+    type: forbid_import_from_path
+    from: "src/features/**"
+    forbid: "**/pages/**"
+    severity: error
+  - name: features-no-widgets
+    type: forbid_import_from_path
+    from: "src/features/**"
+    forbid: "**/widgets/**"
+    severity: error
+
+  - name: widgets-no-app
+    type: forbid_import_from_path
+    from: "src/widgets/**"
+    forbid: "**/app/**"
+    severity: error
+  - name: widgets-no-pages
+    type: forbid_import_from_path
+    from: "src/widgets/**"
+    forbid: "**/pages/**"
+    severity: error
+
+  - name: pages-no-app
+    type: forbid_import_from_path
+    from: "src/pages/**"
+    forbid: "**/app/**"
+    severity: error

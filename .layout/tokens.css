@@ -1,0 +1,151 @@
+/* Kontakt Board design tokens.
+ * Generated from src/shared/design-system/tokens.ts and theme.ts.
+ * This file is the machine-readable mirror consumed by `layout-context check`
+ * and `layout-context lint`. The TypeScript files stay the single source of
+ * truth: change them first, then mirror the change here.
+ */
+:root {
+  /* Palette — src/shared/design-system/tokens.ts, tokens.color */
+  --color-brand: #315ea8;
+  --color-brand-hover: #244d90;
+  --color-brand-soft: #e9f0ff;
+  --bg-surface: #ffffff;
+  --bg-app: #f5f7fb;
+  --bg-subtle: #eef1f6;
+  --text-primary: #172033;
+  --text-secondary: #667085;
+  --color-border: #e3e7ee;
+  --color-danger: #c93646;
+  --color-danger-soft: #ffeaed;
+  --color-warning: #a95f00;
+  --color-warning-soft: #fff2dc;
+  --color-success: #1f7a4d;
+  --color-success-soft: #e4f5ec;
+  --color-surface-glass: rgba(247, 248, 252, 0.88);
+
+  /* Stage accents — tokens.ts, stageColors[] */
+  --stage-1: #5275b8;
+  --stage-2: #9a6cb3;
+  --stage-3: #c58328;
+  --stage-4: #3c8599;
+  --stage-5: #39805c;
+  --stage-6: #9b5962;
+
+  /* Spacing scale — tokens.spacing (MUI spacing unit = 8px = --spacing-sm) */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 12px;
+  --spacing-lg: 16px;
+  --spacing-xl: 24px;
+  --spacing-xxl: 32px;
+
+  /* Radii — tokens.radius (numeric) / tokens.radiusCss (string form of the same scale) */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --radius-pill: 999px;
+  --radius-round: 50%;
+
+  /* Typography — src/shared/design-system/theme.ts, typography */
+  --font-family: Inter Variable, Arial, sans-serif;
+  --font-size-h1: 1.75rem;
+  --line-height-h1: 1.25;
+  --letter-spacing-h1: -0.03em;
+  --font-size-h2: 1.25rem;
+  --line-height-h2: 1.35;
+  --letter-spacing-h2: -0.02em;
+  --font-size-subtitle1: 0.95rem;
+  --font-size-body1: 0.9rem;
+  --line-height-body1: 1.55;
+  --font-size-body2: 0.825rem;
+  --line-height-body2: 1.5;
+  --font-size-button: 0.85rem;
+
+  /* Font weights — tokens.fontWeight */
+  --font-weight-regular: 450;
+  --font-weight-navigation: 620;
+  --font-weight-semibold: 650;
+  --font-weight-strong: 680;
+  --font-weight-bold: 700;
+  --font-weight-display: 720;
+  --font-weight-logo: 800;
+
+  /* Icon sizes — tokens.iconSize */
+  --icon-size-small: 1rem;
+  --icon-size-compact: 0.9375rem;
+
+  /* Sizes — tokens.size */
+  --size-nav-width: 224px;
+  --size-nav-compact-width: 72px;
+  --size-topbar-height: 72px;
+  --size-control-height: 40px;
+  --size-card-min-width: 288px;
+  --size-drawer-width: 560px;
+  --size-drawer-max-width: 92vw;
+  --size-content-narrow: 980px;
+  --size-content-medium: 1100px;
+  --size-content-wide: 1120px;
+  --size-form-narrow: 420px;
+  --size-error-content: 680px;
+  --size-startup-content: 640px;
+  --size-search-board: 300px;
+  --size-search-contacts: 360px;
+  --size-search-global: 480px;
+  --size-select-small: 170px;
+  --size-select-medium: 180px;
+  --size-select-wide: 190px;
+  --size-call-label: 120px;
+  --size-call-input: 220px;
+  --size-import-label: 170px;
+  --size-title-slot: 180px;
+  --size-logo: 34px;
+  --size-nav-item: 44px;
+  --size-nav-icon-slot: 38px;
+  --size-stage-dot: 12px;
+  --size-column-dot: 9px;
+  --size-color-button: 36px;
+  --size-column-header: 40px;
+  --size-column-body: 100px;
+  --size-tag-dot: 10px;
+  --size-tag-menu: 240px;
+  --size-report-icon: 42px;
+  --size-progress-bar: 8px;
+  --size-empty-icon: 40px;
+  --size-upload-icon: 48px;
+  --size-success-icon: 56px;
+  --size-scrollbar: 10px;
+  --size-excel-column: 22px;
+  --size-pipeline-step: 96px;
+  --size-pipeline-dot: 18px;
+  --size-pipeline-ring: 28px;
+  --size-pipeline-line: 2px;
+  --size-app-loader: 300px;
+  --size-chat-viewport: 420px;
+  --size-chat-bubble-max: 78%;
+  --size-zero: 0;
+  --size-full: 100%;
+  --size-viewport: 100vh;
+  --size-board-viewport: calc(100vh - 170px);
+  --size-contacts-viewport: calc(100vh - 180px);
+
+  /* Insets — tokens.inset */
+  --inset-card-action: 8px;
+  --inset-navigation-footer: 20px;
+
+  /* Elevation — tokens.elevation */
+  --elevation-card: 0 1px 2px rgba(23, 32, 51, 0.06);
+  --elevation-card-hover: 0 8px 22px rgba(23, 32, 51, 0.09);
+  --elevation-floating: 0 18px 48px rgba(23, 32, 51, 0.16);
+
+  /* Motion — tokens.motion */
+  --motion-fast: 140ms ease;
+  --motion-normal: 220ms ease;
+
+  /* Focus ring — tokens.focus */
+  --focus-outline: 3px solid;
+  --focus-offset: -3px;
+
+  /* Effects — tokens.effect */
+  --effect-glass-blur: blur(14px);
+  --effect-scrollbar-border: 3px solid transparent;
+}
