@@ -183,6 +183,7 @@ than writing a number into `sx`.
 | `var(--size-app-loader)` | `300px` | `tokens.size.appLoader` |
 | `var(--size-chat-viewport)` | `420px` | `tokens.size.chatViewport` |
 | `var(--size-chat-bubble-max)` | `78%` | `tokens.size.chatBubbleMax` |
+| `var(--size-qr-code)` | `220px` | `tokens.size.qrCode` |
 | `var(--size-zero)` | `0` | `tokens.size.zero` |
 | `var(--size-full)` | `100%` | `tokens.size.full` |
 | `var(--size-viewport)` | `100vh` | `tokens.size.viewport` |
@@ -704,6 +705,40 @@ Create-contact form inside a MUI Dialog. (project)
 - `--size-form-narrow`
 - `--spacing-md`
 
+### SendProposalDialog
+
+Dialog that sends a commercial proposal to MAX: it looks the card's phone up through the local bridge, allows editing the number, and reports the send outcome. (project)
+
+- `--spacing-lg`
+- `--spacing-md`
+
+### LookupNotice
+
+Result of the MAX recipient lookup inside the proposal dialog: searching, found, not found, or an empty number. (project)
+
+- `--spacing-md`
+
+### SendOutcomeNotice
+
+Outcome of a MAX send: delivered, unknown status without a retry action, or not sent. (project)
+
+- `--spacing-md`
+
+### QrPanel
+
+MAX login QR code inside the account settings, falling back to the raw login link when the bridge could not render an image. (project)
+
+- `--size-qr-code`
+- `--radius-md`
+
+### MaxAccountSettings
+
+MAX account section of the settings page: QR login, two-factor password, connected account, logout. (project)
+
+- `--size-qr-code`
+- `--size-form-narrow`
+- `--radius-md`
+
 ### AppErrorBoundary
 
 Top-level error surface. (project)
@@ -951,6 +986,13 @@ Icon from `@mui/icons-material`.
 - `--icon-size-compact`
 
 ### PhoneOutlined
+
+Icon from `@mui/icons-material`.
+
+- `--icon-size-small`
+- `--icon-size-compact`
+
+### QrCode2
 
 Icon from `@mui/icons-material`.
 
