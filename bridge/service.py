@@ -9,10 +9,10 @@ HTTP-слой не знает ни про потоки, ни про event loop: 
 import asyncio
 import logging
 import threading
+from concurrent.futures import Future
 from concurrent.futures import TimeoutError as FutureTimeoutError
-from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator
+from typing import Any, Coroutine
 
 from history import SendLedger
 from phones import mask_phone
@@ -97,32 +97,53 @@ class BridgeService:
             raise BridgeError(409, str(exc)) from exc
 
     def search(self, phone: str) -> SendResult:
-        loop = self._require_connected_loop()
-        with self._exclusive():
-            future = asyncio.run_coroutine_threadsafe(find_recipient(self.runtime.client, phone), loop)
-            try:
-                return future.result(timeout=SEARCH_TIMEOUT)
-            except FutureTimeoutError as exc:
-                # Проверка номера ничего не пишет, поэтому отмена безопасна.
-                future.cancel()
-                raise BridgeError(504, "MAX не ответил на проверку номера вовремя.") from exc
+        future = self._submit(find_recipient(self.runtime.client, phone))
+        try:
+            return future.result(timeout=SEARCH_TIMEOUT)
+        except FutureTimeoutError as exc:
+            # Проверка номера ничего не пишет, поэтому отмена безопасна.
+            future.cancel()
+            raise BridgeError(504, "MAX не ответил на проверку номера вовремя.") from exc
 
     def send(self, phone: str, text: str) -> SendResult:
-        loop = self._require_connected_loop()
-        with self._exclusive():
-            future = asyncio.run_coroutine_threadsafe(self._send_coro(phone, text), loop)
-            try:
-                return future.result(timeout=SEND_TIMEOUT)
-            except FutureTimeoutError as exc:
-                # Отправку НЕ отменяем: запрос мог уже дойти до MAX. Задача
-                # доиграет в своём loop и сама закроет запись в журнале, который
-                # и остаётся настоящей защитой от дубля.
-                LOG.error("Отправка на %s не завершилась вовремя", mask_phone(phone))
-                raise BridgeError(
-                    504,
-                    "MAX не подтвердил отправку вовремя. Сообщение могло уже уйти, "
-                    "не повторяйте автоматически, проверьте переписку вручную.",
-                ) from exc
+        future = self._submit(self._send_coro(phone, text))
+        try:
+            return future.result(timeout=SEND_TIMEOUT)
+        except FutureTimeoutError as exc:
+            # Отправку НЕ отменяем: запрос мог уже дойти до MAX. Задача доиграет
+            # в своём loop и сама закроет запись в журнале, который и остаётся
+            # настоящей защитой от дубля.
+            LOG.error("Отправка на %s не завершилась вовремя", mask_phone(phone))
+            raise BridgeError(
+                504,
+                "MAX не подтвердил отправку вовремя. Сообщение могло уже уйти, "
+                "не повторяйте автоматически, проверьте переписку вручную.",
+            ) from exc
+
+    def _submit(self, coro: Coroutine[Any, Any, SendResult]) -> Future[SendResult]:
+        """Поставить операцию в event loop рантайма и занять его на время работы."""
+        try:
+            loop = self._require_connected_loop()
+        except BridgeError:
+            # Корутина создана раньше проверки, и без закрытия Python пожалуется
+            # на «coroutine was never awaited» в постороннем месте.
+            coro.close()
+            raise
+        if not self._operation_lock.acquire(blocking=False):
+            coro.close()
+            raise BridgeError(409, "Предыдущая операция ещё выполняется")
+        try:
+            future = asyncio.run_coroutine_threadsafe(coro, loop)
+        except RuntimeError as exc:
+            # Поток рантайма успел закрыть loop между проверкой и постановкой.
+            self._operation_lock.release()
+            coro.close()
+            raise BridgeError(503, "Соединение с MAX закрылось. Подключитесь заново.") from exc
+        # Лок снимает сама задача, а не выход из этого метода: по таймауту
+        # отправка продолжает выполняться, и до её конца второй запрос в MAX
+        # пускать нельзя.
+        future.add_done_callback(lambda _: self._operation_lock.release())
+        return future
 
     async def _send_coro(self, phone: str, text: str) -> SendResult:
         # Журнал открывается внутри потока event loop: соединение sqlite3
@@ -132,7 +153,7 @@ class BridgeService:
 
     def _require_connected_loop(self) -> asyncio.AbstractEventLoop:
         loop = self.runtime.loop
-        if not self.runtime.connected or loop is None or not loop.is_running():
+        if not self.runtime.connected or loop is None:
             raise BridgeError(
                 503,
                 "Аккаунт MAX не подключён. Войдите по QR-коду в настройках приложения.",
@@ -140,15 +161,6 @@ class BridgeService:
         if self.runtime.client is None:
             raise BridgeError(503, "Клиент MAX недоступен. Повторите вход.")
         return loop
-
-    @contextmanager
-    def _exclusive(self) -> Iterator[None]:
-        if not self._operation_lock.acquire(blocking=False):
-            raise BridgeError(409, "Предыдущая операция ещё выполняется")
-        try:
-            yield
-        finally:
-            self._operation_lock.release()
 
     def shutdown(self) -> None:
         if self.runtime.shutdown(SHUTDOWN_TIMEOUT):

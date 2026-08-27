@@ -15,89 +15,16 @@ import asyncio
 import logging
 import sqlite3
 import threading
-import time
 from contextlib import closing
 from pathlib import Path
 from typing import Any, Callable
 
+from auth_flow import Emit, LoginCancelledError, build_auth_flow
 from transport import MAX_WS_URL, build_direct_web_client_class, silence_websocket_logging
-
-Emit = Callable[[str, object], None]
 
 LOG = logging.getLogger("kontakt_bridge")
 
 SESSION_FILE = "session.db"
-
-
-class LoginCancelledError(RuntimeError):
-    """Оператор отменил вход до того, как MAX выдал токен."""
-
-
-def _build_auth_flow(emit: Emit, cancel: asyncio.Event, passwords: asyncio.Queue) -> Any:
-    """QR-вход PyMax, который реагирует на отмену сразу, а не по таймеру.
-
-    Штатный `QrAuthFlow` опрашивает MAX до истечения QR-кода и между опросами
-    ничего не слушает. Здесь ожидание идёт одновременно за ответом MAX и за
-    событием отмены, поэтому кнопка «Отмена» срабатывает мгновенно.
-    """
-    from pymax.auth.qr import QrAuthFlow
-
-    class _QrHandler:
-        async def show_qr(self, qr_url: str) -> None:
-            # Ссылка входа передаётся только в память процесса: ни лога, ни диска.
-            emit("qr", qr_url)
-
-    class _PasswordProvider:
-        async def get_password(self, hint: str | None = None) -> str:
-            emit("password_required", hint or "")
-            password_task = asyncio.create_task(passwords.get())
-            cancel_task = asyncio.create_task(cancel.wait())
-            try:
-                done, _ = await asyncio.wait(
-                    {password_task, cancel_task}, return_when=asyncio.FIRST_COMPLETED
-                )
-                if cancel_task in done and cancel.is_set():
-                    raise LoginCancelledError("Вход отменён оператором")
-                value = await password_task
-                if value is None:
-                    raise LoginCancelledError("Вход отменён оператором")
-                # Пароль передаётся как есть: пробелы могут быть его частью, а
-                # пустая строка для PyMax означает «спроси ещё раз».
-                return str(value)
-            finally:
-                for task in (password_task, cancel_task):
-                    if not task.done():
-                        task.cancel()
-                await asyncio.gather(password_task, cancel_task, return_exceptions=True)
-
-    class _Flow(QrAuthFlow):
-        async def _poll_qr(self, app: Any, qr_info: Any) -> bool:
-            interval = max(0.1, qr_info.polling_interval / 1000)
-            expires_at = qr_info.expires_at / 1000
-
-            while time.time() < expires_at:
-                if cancel.is_set():
-                    raise LoginCancelledError("Вход отменён оператором")
-
-                response = await app.api.auth.check_qr(qr_info.track_id)
-                # После «login_available» отмену уже не слушаем: токен вот-вот
-                # будет выдан, и его нужно сохранить, чтобы было что отзывать.
-                if response.status.login_available:
-                    return True
-
-                remaining = max(0.0, expires_at - time.time())
-                wait_for = min(interval, remaining)
-                if wait_for <= 0:
-                    break
-                try:
-                    await asyncio.wait_for(cancel.wait(), timeout=wait_for)
-                except asyncio.TimeoutError:
-                    continue
-                raise LoginCancelledError("Вход отменён оператором")
-
-            return False
-
-    return _Flow(_QrHandler(), _PasswordProvider())
 
 
 class MaxRuntime:
@@ -111,6 +38,9 @@ class MaxRuntime:
         self.loop: asyncio.AbstractEventLoop | None = None
         self._thread: threading.Thread | None = None
         self._thread_lock = threading.Lock()
+        # Отмену взводит `threading.Event`: он работает и до того, как event loop
+        # успел стартовать. Событие asyncio нужно только чтобы разбудить loop.
+        self._cancel_requested = threading.Event()
         self._cancel: asyncio.Event | None = None
         self._passwords: asyncio.Queue | None = None
         self._wipe_session = False
@@ -139,40 +69,85 @@ class MaxRuntime:
         with self._thread_lock:
             if self._thread and self._thread.is_alive():
                 raise RuntimeError("Предыдущее подключение MAX ещё завершается. Подождите пару секунд.")
+            self._cancel_requested.clear()
             self._thread = threading.Thread(target=self._thread_main, name="max-runtime", daemon=True)
             self._thread.start()
 
     def cancel_connection(self) -> None:
-        """Отменить вход или закрыть уже открытое соединение."""
+        """Отменить вход. Если он уже завершился, сессию нужно отозвать.
+
+        Оператор нажимает «Отмена» на экране входа, но между его кликом и
+        подтверждением QR проходит секунда опроса состояния. Успевшую появиться
+        серверную сессию нельзя просто забыть: её никто потом не найдёт.
+        """
+        loop, cancel = self._wake_for_stop()
+        if loop is not None and cancel is not None and self.connected:
+            self._run_in_loop(loop, self._logout_coro())
+
+    def _wake_for_stop(self) -> tuple[asyncio.AbstractEventLoop | None, asyncio.Event | None]:
+        """Взвести отмену. Соединение при этом не рвётся.
+
+        Пока идёт вход, закрывать соединение нельзя: оборванный запрос к MAX
+        пришёл бы наверх ошибкой транспорта вместо честной отмены. Достаточно
+        разбудить ожидание, дальше вход свернётся сам.
+        """
+        self._cancel_requested.set()
         loop, cancel = self.loop, self._cancel
-        if loop is None or cancel is None or not loop.is_running():
-            return
-        loop.call_soon_threadsafe(cancel.set)
-        # Событие отмены помогает только пока идёт QR-вход. Если соединение уже
-        # установлено, ждать нечего, и его нужно закрыть явно.
-        asyncio.run_coroutine_threadsafe(self._close_client(), loop)
+        if loop is not None and cancel is not None:
+            self._in_loop(loop, cancel.set)
+        return loop, cancel
 
     def submit_password(self, password: str) -> None:
         loop, queue = self.loop, self._passwords
-        if loop is None or queue is None or not loop.is_running():
+        if loop is None or queue is None or not self._in_loop(loop, queue.put_nowait, password):
             raise RuntimeError("Вход в MAX сейчас не выполняется")
-        loop.call_soon_threadsafe(queue.put_nowait, password)
 
     def logout(self) -> None:
         loop = self.loop
-        if not self.connected or loop is None or not loop.is_running():
+        if not self.connected or loop is None or not self._run_in_loop(loop, self._logout_coro()):
             raise RuntimeError("Аккаунт MAX не подключён")
-        self._wipe_session = True
-        asyncio.run_coroutine_threadsafe(self._logout_coro(), loop)
 
     def shutdown(self, timeout: float) -> bool:
-        """Остановить поток рантайма. False — поток не успел завершиться."""
+        """Остановить поток рантайма. False — поток не успел завершиться.
+
+        Сессия при остановке НЕ отзывается: мост закрывают вместе с окном
+        приложения каждый вечер, и вход по QR не должен требоваться каждое утро.
+        """
         thread = self._thread
         if thread is None or not thread.is_alive():
             return True
-        self.cancel_connection()
+        loop, _ = self._wake_for_stop()
+        if loop is not None:
+            # Разрыв намеренный, поэтому соединение помечается закрытым заранее:
+            # иначе `_serve_client` сообщил бы о нём как о сетевом сбое.
+            self.connected = False
+            self._run_in_loop(loop, self._close_client())
         thread.join(timeout)
         return not thread.is_alive()
+
+    @staticmethod
+    def _in_loop(loop: asyncio.AbstractEventLoop, call: Callable[..., Any], *args: Any) -> bool:
+        """Выполнить вызов в потоке loop. False — loop уже закрыт.
+
+        Проверять `is_running()` заранее бесполезно: поток рантайма может успеть
+        закрыть loop между проверкой и вызовом, и тогда прилетает RuntimeError.
+        """
+        try:
+            loop.call_soon_threadsafe(call, *args)
+        except RuntimeError:
+            return False
+        return True
+
+    @staticmethod
+    def _run_in_loop(loop: asyncio.AbstractEventLoop, coro: Any) -> bool:
+        try:
+            asyncio.run_coroutine_threadsafe(coro, loop)
+        except RuntimeError:
+            # Корутину надо закрыть вручную, иначе Python ругается на
+            # «coroutine was never awaited» уже в другом месте.
+            coro.close()
+            return False
+        return True
 
     async def _close_client(self) -> None:
         client = self.client
@@ -184,15 +159,28 @@ class MaxRuntime:
             LOG.warning("Закрытие клиента MAX завершилось ошибкой: %s", type(exc).__name__)
 
     async def _logout_coro(self) -> None:
+        """Завершить серверную сессию и только потом стереть локальную копию.
+
+        Порядок принципиален. Если удалить токен, не дождавшись подтверждения от
+        MAX, в списке устройств останется живая web-сессия, которую уже нечем
+        отозвать: оператор о ней не узнает.
+        """
         client = self.client
         if client is None:
             return
+        self.connected = False
         try:
             await client.logout()
-        except Exception as exc:  # noqa: BLE001 - сессию всё равно стираем локально
-            LOG.warning("MAX не подтвердил выход: %s", type(exc).__name__)
-        self.connected = False
-        self.emit("logged_out", None)
+        except Exception as exc:  # noqa: BLE001 - сессия ценнее аккуратной трассировки
+            LOG.error("MAX не подтвердил выход: %s", type(exc).__name__)
+            self.emit(
+                "connection_error",
+                "MAX не подтвердил завершение сессии. Она сохранена, повторите выход "
+                "или завершите её вручную в списке устройств MAX.",
+            )
+        else:
+            self._wipe_session = True
+            self.emit("logged_out", None)
         await self._close_client()
 
     def _wipe_session_files(self) -> None:
@@ -203,6 +191,23 @@ class MaxRuntime:
             except OSError as exc:
                 LOG.error("Не удалось удалить файл сессии MAX: %s", type(exc).__name__)
 
+    def _is_invalid_token(self, exc: BaseException) -> bool:
+        """MAX отозвал сохранённый токен: локальную копию надо стереть.
+
+        Спрашиваем саму библиотеку, а не разбираем текст: PyMax сверяет опкод и
+        код ошибки, и только он знает, что `FAIL_LOGOUT_ALL` (оператор вышел на
+        всех устройствах) значит то же самое, что `FAIL_LOGIN_TOKEN`.
+        """
+        app = getattr(self.client, "_app", None)
+        checker = getattr(app, "_is_invalid_login_token_error", None)
+        if callable(checker):
+            try:
+                return bool(checker(exc))
+            except Exception:  # noqa: BLE001 - контракт PyMax мог измениться
+                LOG.warning("Проверка токена PyMax не отработала, разбираю текст ошибки")
+        text = str(exc).upper()
+        return "FAIL_LOGIN_TOKEN" in text or "FAIL_LOGOUT_ALL" in text
+
     def _thread_main(self) -> None:
         try:
             self._run()
@@ -210,7 +215,7 @@ class MaxRuntime:
             self.emit("connection_cancelled", None)
         except BaseException as exc:  # noqa: BLE001 - поток не должен молча умереть
             LOG.error("Рантайм MAX завершился: %s: %s", type(exc).__name__, exc)
-            if _is_invalid_token(exc):
+            if self._is_invalid_token(exc):
                 self._wipe_session = True
                 self.emit("session_invalid", None)
             else:
@@ -225,15 +230,21 @@ class MaxRuntime:
             self.loop = None
             self._cancel = None
             self._passwords = None
+            # Событие об остановке уходит до того, как слот потока освободится:
+            # иначе новое подключение успело бы стартовать и получить это
+            # событие как своё, оказавшись в фазе «остановлено».
+            self.emit("runtime_stopped", None)
             with self._thread_lock:
                 self._thread = None
-            self.emit("runtime_stopped", None)
 
     def _run(self) -> None:
         from pymax import ExtraConfig, WebClient
 
         silence_websocket_logging()
         self.session_dir.mkdir(parents=True, exist_ok=True)
+        # Флаг привязан к одному прогону потока: подключение не должно унести
+        # удаление сессии, заказанное в прошлой жизни рантайма.
+        self._wipe_session = False
 
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
@@ -257,19 +268,25 @@ class MaxRuntime:
                 reconnect=False,
                 request_timeout=20.0,
             ),
-            auth_flow=_build_auth_flow(self.emit, cancel, passwords),
+            auth_flow=build_auth_flow(self.emit, cancel, self._cancel_requested, passwords),
         )
 
         @self.client.on_start()
         async def _on_start(_client: Any) -> None:
-            if cancel.is_set():
+            if self._cancel_requested.is_set():
                 # Отмена пришла в момент подтверждения QR: серверная сессия уже
-                # создана, поэтому её нужно закрыть, а не просто забыть.
-                self._wipe_session = True
+                # создана, поэтому её нужно закрыть, а не просто забыть. О своём
+                # исходе `_logout_coro` сообщает сам, и он же закрывает клиента,
+                # обрывая эту задачу: после него код здесь уже не выполняется.
                 await self._logout_coro()
-                raise LoginCancelledError("Вход отменён оператором")
+                return
             self.connected = True
             self.emit("connected", True)
+
+        # Отмена могла прийти, пока поток импортировал PyMax: до сети дело не
+        # дошло, отзывать нечего.
+        if self._cancel_requested.is_set():
+            raise LoginCancelledError("Вход отменён оператором")
 
         try:
             loop.run_until_complete(self._serve_client())
@@ -294,12 +311,6 @@ class MaxRuntime:
                 self.emit("connected", False)
         finally:
             await self._close_client()
-
-
-def _is_invalid_token(exc: BaseException) -> bool:
-    """MAX отозвал сохранённый токен: локальную копию надо стереть."""
-    text = str(exc).lower()
-    return "login token" in text or "token is invalid" in text
 
 
 def _drain_loop(loop: asyncio.AbstractEventLoop) -> None:

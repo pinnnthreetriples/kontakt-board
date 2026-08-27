@@ -57,11 +57,6 @@ SEND_OUTCOMES: dict[ResultStatus, SendOutcome] = {
         note="MAX отклонил запрос из-за лимита. Повторите позже вручную.",
     ),
     ResultStatus.ERROR: SendOutcome(delivered=False, uncertain=False),
-    ResultStatus.FOUND: SendOutcome(
-        delivered=False,
-        uncertain=False,
-        note="Получен статус проверки вместо статуса отправки.",
-    ),
 }
 
 
@@ -294,7 +289,6 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 "found": result.status is ResultStatus.FOUND,
                 "recipient": result.recipient,
                 "status": result.status.name,
-                "statusText": result.status.value,
                 "detail": result.detail,
             },
             origin,
@@ -322,7 +316,6 @@ class BridgeHandler(BaseHTTPRequestHandler):
             {
                 "ok": True,
                 "status": result.status.name,
-                "statusText": result.status.value,
                 "recipient": result.recipient,
                 "detail": detail,
                 "delivered": outcome.delivered,

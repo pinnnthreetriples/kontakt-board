@@ -46,8 +46,6 @@ def build_tls_context() -> ssl.SSLContext:
     if not EXTRA_ROOT_PATH.is_file():
         # Корня рядом нет: работаем только на системном хранилище, как раньше.
         return tls
-    if EXTRA_ROOT_PATH.is_symlink():
-        raise RuntimeError("Файл корневого сертификата MAX не должен быть ссылкой")
     payload = EXTRA_ROOT_PATH.read_bytes()
     digest = hashlib.sha256(payload).hexdigest()
     if digest != EXTRA_ROOT_SHA256:
@@ -79,6 +77,8 @@ def build_direct_web_client_class(web_client_base: type[Any]) -> type[Any]:
 
     class DirectWebSocketTransport(WebSocketTransport):
         async def connect(self) -> None:
+            # Проверка стоит в точке дозвона: здесь видны ровно те значения, с
+            # которыми уходит запрос.
             if self.url != MAX_WS_URL:
                 raise RuntimeError("Неожиданный адрес MAX WebSocket")
             if self.proxy is not None:
@@ -101,18 +101,12 @@ def build_direct_web_client_class(web_client_base: type[Any]) -> type[Any]:
     class DirectWebClient(web_client_base):
         async def send_text_exact(self, chat_id: int, text: str) -> Any:
             """Send the text exactly as entered, without PyMax Markdown rewriting."""
-            if not text:
-                raise ValueError("Message text is empty")
             from pymax.api.messages.payloads import SendMessagePayload, SendMessagePayloadMessage
             from pymax.api.response import require_payload_model
             from pymax.protocol import Opcode
             from pymax.types.domain import Message
 
-            service = self._app.api.messages
-            next_cid = getattr(service, "_next_cid", None)
-            if not callable(next_cid):
-                raise RuntimeError("PyMax message CID contract changed")
-            cid = int(next_cid())
+            cid = int(self._app.api.messages._next_cid())
             frame = SendMessagePayload(
                 chat_id=chat_id,
                 message=SendMessagePayloadMessage(
@@ -136,10 +130,6 @@ def build_direct_web_client_class(web_client_base: type[Any]) -> type[Any]:
             return message
 
         def _build_connection(self) -> Any:
-            if self.extra_config.url != MAX_WS_URL:
-                raise RuntimeError("Неожиданный адрес MAX WebSocket")
-            if self.extra_config.proxy is not None:
-                raise RuntimeError("Прокси для MAX отключён политикой безопасности")
             transport = DirectWebSocketTransport(
                 url=self.extra_config.url,
                 proxy=None,
@@ -157,7 +147,7 @@ def build_direct_web_client_class(web_client_base: type[Any]) -> type[Any]:
 
 def silence_websocket_logging() -> None:
     """Keep third-party network diagnostics out of disk/root logs."""
-    for name in ("websockets", "websockets.client"):
+    for name in ("websockets",):
         logger = logging.getLogger(name)
         logger.handlers.clear()
         logger.addHandler(logging.NullHandler())

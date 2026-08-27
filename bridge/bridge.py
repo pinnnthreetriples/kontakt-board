@@ -26,12 +26,15 @@ from service import BridgeError, BridgeService
 HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
 
-# По умолчанию разрешены только адреса разработки: `npm run dev` и `npm run
-# preview`. Рабочий запуск занимает первый свободный порт, поэтому его точный
-# адрес передаёт `scripts/serve-dist.ps1` ключом --origin. Список конкретных
+# `scripts/serve-dist.ps1` занимает первый свободный порт из диапазона
+# 4173-4183 и передаёт точный адрес ключом --origin, а `npm run dev` поднимает
+# Vite на 5173. Диапазон продублирован здесь, чтобы мост, запущенный вручную или
+# переживший своё окно, не отвечал 403 на каждый запрос. Список конкретных
 # источников заменяет собой звёздочку в CORS.
 DEFAULT_ORIGINS = tuple(
-    f"http://{host}:{port}" for port in (5173, 4173) for host in ("localhost", "127.0.0.1")
+    f"http://{host}:{port}"
+    for port in (5173, *range(4173, 4184))
+    for host in ("localhost", "127.0.0.1")
 )
 
 LOG = logging.getLogger("kontakt_bridge")
@@ -112,8 +115,6 @@ def main(argv: list[str] | None = None) -> int:
     try:
         while not stop.wait(0.5):
             pass
-    except KeyboardInterrupt:
-        LOG.info("Получен Ctrl+C: останавливаю мост")
     finally:
         server.shutdown()
         server.server_close()

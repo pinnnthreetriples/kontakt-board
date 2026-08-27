@@ -6,6 +6,27 @@ from pathlib import Path
 from runtime import MaxRuntime
 
 
+class FakeApiError(Exception):
+    """Двойник PyMax ApiError: текст собирается так же, как в библиотеке."""
+
+    def __init__(self, error: str) -> None:
+        super().__init__(f"Ошибка входа [{error}]")
+        self.error = error
+        self.opcode = 19
+
+
+class FakeApp:
+    """Двойник PyMax App: мост спрашивает про токен именно у библиотеки."""
+
+    @staticmethod
+    def _is_invalid_login_token_error(exc: Exception) -> bool:
+        return isinstance(exc, FakeApiError) and exc.error in ("FAIL_LOGIN_TOKEN", "FAIL_LOGOUT_ALL")
+
+
+class FakeClient:
+    _app = FakeApp()
+
+
 class SavedSessionTests(unittest.TestCase):
     def setUp(self) -> None:
         self._dir = tempfile.TemporaryDirectory()
@@ -38,6 +59,23 @@ class SavedSessionTests(unittest.TestCase):
         self.runtime.session_dir.mkdir(parents=True, exist_ok=True)
         self.runtime.session_path.write_bytes(b"not a database")
         self.assertFalse(self.runtime.has_saved_session())
+
+    def test_revoked_token_is_recognised_by_pymax(self) -> None:
+        # Текст ошибки PyMax выглядит как «... [FAIL_LOGIN_TOKEN]», и разбирать
+        # его самостоятельно нельзя: библиотека сверяет опкод и код ошибки.
+        self.runtime.client = FakeClient()
+        for code in ("FAIL_LOGIN_TOKEN", "FAIL_LOGOUT_ALL"):
+            with self.subTest(code=code):
+                self.assertTrue(self.runtime._is_invalid_token(FakeApiError(code)))
+
+    def test_other_errors_do_not_wipe_the_session(self) -> None:
+        self.runtime.client = FakeClient()
+        self.assertFalse(self.runtime._is_invalid_token(FakeApiError("FAIL_RATE_LIMIT")))
+        self.assertFalse(self.runtime._is_invalid_token(ConnectionError("обрыв")))
+
+    def test_revoked_token_is_recognised_without_client(self) -> None:
+        # Ошибка может прийти до того, как клиент создан: тогда остаётся текст.
+        self.assertTrue(self.runtime._is_invalid_token(FakeApiError("FAIL_LOGIN_TOKEN")))
 
     def test_wipe_removes_session_files(self) -> None:
         self._make_store(with_token=True)

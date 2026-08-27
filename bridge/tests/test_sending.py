@@ -91,6 +91,21 @@ class SendingTests(unittest.TestCase):
         repeat = self.send(client, phone="+79093228701")
         self.assertIs(repeat.status, ResultStatus.SKIPPED_DUPLICATE)
 
+    def test_unfinished_attempt_blocks_the_second_phone_of_the_same_person(self) -> None:
+        # Мост убили между бронью и ответом MAX: исход неизвестен. Второй номер
+        # того же человека в карточке не должен превратиться в дубль КП.
+        self.send(FakeClient(send_error=ConnectionError("обрыв")))
+        repeat = self.send(FakeClient(), phone="+79093228701")
+        self.assertIs(repeat.status, ResultStatus.SKIPPED_DUPLICATE)
+
+    def test_recipient_name_reads_pymax_name_record(self) -> None:
+        # У PyMax в записи имени поля необязательные: имя может лежать в
+        # first_name, а `name` быть пустым.
+        record = type("Name", (), {"name": None, "first_name": "Иван", "last_name": "Петров"})()
+        contact = type("Contact", (), {"id": 300, "names": [record]})()
+        result = asyncio.run(find_recipient(FakeClient(contact=contact), "+79093228700"))
+        self.assertEqual(result.recipient, "Иван")
+
     def test_rejected_send_releases_reservation(self) -> None:
         rejected = self.send(FakeClient(send_error=FakeApiError("отказ")))
         self.assertIs(rejected.status, ResultStatus.ERROR)

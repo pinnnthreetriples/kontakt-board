@@ -38,9 +38,13 @@ $address = "http://127.0.0.1:$port/"
 
 # Мост к MAX поднимается в своём окне: отправка КП должна работать сразу после
 # запуска приложения, а его сообщения об ошибках оператор должен видеть.
+# Путь берётся в кавычки: Start-Process склеивает аргументы через пробел и сам
+# ничего не кавычит, поэтому без них мост молча не запускается из любой папки с
+# пробелом в имени, включая рабочий стол пользователя с именем из двух слов.
+$bridgeScript = '"' + (Join-Path $PSScriptRoot 'start-bridge.ps1') + '"'
 $bridge = Start-Process powershell.exe -PassThru -ArgumentList @(
   '-NoProfile', '-ExecutionPolicy', 'Bypass',
-  '-File', (Join-Path $PSScriptRoot 'start-bridge.ps1'),
+  '-File', $bridgeScript,
   '-Origin', "http://127.0.0.1:$port"
 )
 

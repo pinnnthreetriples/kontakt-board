@@ -58,12 +58,17 @@ class SendLedger:
         return str(row[0]) if row else None
 
     def blocks_recipient_resend(self, user_id: str, fingerprint: str) -> bool:
-        """Тот же текст этому же пользователю MAX, но заявленный другим номером."""
+        """Тот же текст этому же пользователю MAX, но заявленный другим номером.
+
+        Незакрытая бронь блокирует наравне с отправленной: она означает попытку,
+        исход которой неизвестен, а у контакта в карточке бывает второй телефон,
+        через который тот же человек получил бы дубль.
+        """
         if not user_id:
             return False
         row = self._conn.execute(
-            "SELECT 1 FROM send_ledger WHERE user_id = ? AND fingerprint = ? AND state != ?",
-            (user_id, fingerprint, STATE_PENDING),
+            "SELECT 1 FROM send_ledger WHERE user_id = ? AND fingerprint = ?",
+            (user_id, fingerprint),
         ).fetchone()
         return row is not None
 

@@ -16,7 +16,7 @@ const SEARCH_TIMEOUT_MS = 70_000;
 const SEND_TIMEOUT_MS = 100_000;
 
 /** Самое частое реальное состояние: мост просто не запущен. */
-const BRIDGE_OFFLINE_HINT = 'Мост MAX не отвечает. Закройте приложение и запустите START_WINDOWS.cmd заново, окно моста должно остаться открытым.';
+const BRIDGE_OFFLINE_HINT = 'Мост MAX не отвечает. При первом запуске он несколько минут ставит свои библиотеки, дождитесь строки «Мост слушает» в его окне. Если окна нет, закройте приложение и запустите START_WINDOWS.cmd заново.';
 
 export class BridgeUnreachableError extends Error {
   constructor() { super(BRIDGE_OFFLINE_HINT); }

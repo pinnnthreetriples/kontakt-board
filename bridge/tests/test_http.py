@@ -7,13 +7,10 @@ from typing import Any
 
 from http_api import BridgeHandler, BridgeServer
 from sending import ResultStatus, SendResult
+from service import BridgeError
 from state import AuthState
 
 ORIGIN = "http://localhost:5173"
-
-
-class FakeRuntime:
-    connected = True
 
 
 class FakeService:
@@ -21,10 +18,11 @@ class FakeService:
 
     def __init__(self) -> None:
         self.state = AuthState()
-        self.runtime = FakeRuntime()
         self.calls: list[tuple[str, tuple[Any, ...]]] = []
         self.search_result = SendResult(ResultStatus.FOUND, recipient="Иван Петров")
         self.send_result = SendResult(ResultStatus.SENT, recipient="Иван Петров")
+        # Ошибка сервиса, которую подставляет тест вместо результата отправки.
+        self.send_error: BridgeError | None = None
 
     def account_name(self) -> str:
         return "Оператор"
@@ -48,6 +46,8 @@ class FakeService:
 
     def send(self, phone: str, text: str) -> SendResult:
         self.calls.append(("send", (phone, text)))
+        if self.send_error is not None:
+            raise self.send_error
         return self.send_result
 
 
@@ -141,6 +141,21 @@ class HttpContractTests(unittest.TestCase):
         self.assertFalse(body["delivered"])
         self.assertTrue(body["uncertain"])
         self.assertIn("повтор", body["detail"].lower())
+
+    def test_service_error_keeps_its_http_status(self) -> None:
+        # На 504 приложение опирается отдельно: оно превращает его в «возможно,
+        # уже отправлено» и запрещает автоповтор. Обычная 500 сломала бы это.
+        self.service.send_error = BridgeError(504, "MAX не подтвердил отправку вовремя.")
+        status, body = self.call("/send", {"phone": "+79093228700", "text": "КП"})
+        self.assertEqual(status, 504)
+        self.assertFalse(body["ok"])
+        self.assertIn("не подтвердил", body["error"])
+
+    def test_missing_connection_is_reported_as_503(self) -> None:
+        self.service.send_error = BridgeError(503, "Аккаунт MAX не подключён.")
+        status, body = self.call("/send", {"phone": "+79093228700", "text": "КП"})
+        self.assertEqual(status, 503)
+        self.assertFalse(body["ok"])
 
     def test_unknown_path_is_not_found(self) -> None:
         status, _ = self.call("/no-such-route", {})

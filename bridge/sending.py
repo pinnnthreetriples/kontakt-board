@@ -50,15 +50,7 @@ def _value(source: Any, attr: str) -> Any:
 
 def recipient_name(contact: Any) -> str:
     """Имя получателя из ответа MAX. Пустая строка, если имени нет."""
-    names = _value(contact, "names")
-    records: tuple[Any, ...]
-    if names is None:
-        records = ()
-    elif isinstance(names, (list, tuple)):
-        records = tuple(item for item in names if item is not None)
-    else:
-        records = (names,)
-
+    records = tuple(item for item in (_value(contact, "names") or ()) if item is not None)
     for source in (*records, contact):
         for attr in ("name", "full_name", "fullName", "first_name", "firstName"):
             value = _value(source, attr)
@@ -77,12 +69,9 @@ def _is_retryable(exc: BaseException) -> bool:
 
 
 def _is_rate_limit(exc: BaseException) -> bool:
-    parts = [str(exc)]
-    for attr in ("error", "message", "localized_message", "title"):
-        value = getattr(exc, attr, None)
-        if value:
-            parts.append(str(value))
-    text = " ".join(parts).lower()
+    # ApiError сам склеивает localized_message, message, title и код ошибки в
+    # текст исключения, поэтому перебирать его поля отдельно незачем.
+    text = str(exc).lower()
     return any(signal in text for signal in ("rate limit", "too many", "flood", "429", "лимит"))
 
 
