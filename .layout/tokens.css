@@ -79,7 +79,7 @@
   --size-nav-compact-width: 72px;
   --size-topbar-height: 72px;
   --size-control-height: 40px;
-  --size-card-min-width: 288px;
+  --size-card-min-width: 320px;
   --size-drawer-width: 560px;
   --size-drawer-max-width: 92vw;
   --size-content-narrow: 980px;
@@ -96,6 +96,7 @@
   --size-select-wide: 190px;
   --size-call-label: 120px;
   --size-call-input: 220px;
+--size-field-min: 170px;
   --size-import-label: 170px;
   --size-title-slot: 180px;
   --size-logo: 34px;
@@ -120,8 +121,9 @@
   --size-pipeline-ring: 28px;
   --size-pipeline-line: 2px;
   --size-app-loader: 300px;
-  --size-chat-viewport: 420px;
   --size-chat-bubble-max: 78%;
+  --size-card-pane: calc(100vh - 340px);
+  --size-card-pane-min: 420px;
   --size-qr-code: 220px;
   --size-zero: 0;
   --size-full: 100%;

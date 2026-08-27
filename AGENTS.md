@@ -28,6 +28,8 @@
   `divider`) или из данных. Случайные HEX/RGB в компонентах запрещены.
 - Отступы, радиусы, тени и типографика берутся из темы или токенов.
 - Размеры (`width`, `height`, `borderRadius`, `fontWeight`, `fontSize`) — из `tokens`.
+  Радиус в `sx` берётся только из `tokens.radiusCss`: числовой `borderRadius` MUI
+  умножает на `shape.borderRadius` темы, и `tokens.radius.md` превращается в 144px.
   Нужного значения нет — добавьте ключ в `tokens`, а не пишите число в `sx`.
 - Правки темы и общих стилей идут в `src/shared/design-system`, а не в отдельные компоненты.
   Описание системы продублировано в `.layout/` (`layout.md`, `tokens.css`) и проверяется

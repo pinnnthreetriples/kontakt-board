@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { ContentCopyOutlined, ExpandMore, PhoneOutlined, SendOutlined } from '@mui/icons-material';
 import { Box, Button, Collapse, IconButton, InputAdornment, Stack, Switch, TextField, Tooltip, Typography } from '@mui/material';
 import { tokens } from '../../../shared/design-system/tokens';
 import { formatShortDate } from '../../../shared/lib/dates';
-import { describeRegionTime, regionTimeHint } from '../../../shared/lib/timezones';
+import { describeRegionTime, regionTimeHint, regionTimeMark } from '../../../shared/lib/timezones';
 import { useClock } from '../../../shared/lib/useClock';
 import type { CustomFieldDefinition } from '../../../shared/model/domain';
 import type { ContactDraft, LeadDraft } from '../model/drafts';
@@ -16,6 +16,7 @@ interface ContactFieldsProps {
   onDraftChange: (draft: ContactDraft) => void;
   onLeadDraftChange: (draft: LeadDraft) => void;
   onCopyPhone: () => void;
+  recordings: ReactNode;
   onSendProposal: () => void;
 }
 
@@ -40,7 +41,7 @@ function CustomFieldsEditor({ fields, draft, onChange }: CustomFieldsEditorProps
   </>;
 }
 
-export function ContactFields({ draft, leadDraft, createdAt, customFields, onDraftChange, onLeadDraftChange, onCopyPhone, onSendProposal }: ContactFieldsProps) {
+export function ContactFields({ draft, leadDraft, createdAt, customFields, onDraftChange, onLeadDraftChange, onCopyPhone, recordings, onSendProposal }: ContactFieldsProps) {
   const [open, setOpen] = useState(false);
   const clock = useClock();
   const localTime = describeRegionTime(draft.region, clock);
@@ -51,12 +52,12 @@ export function ContactFields({ draft, leadDraft, createdAt, customFields, onDra
         <TextField fullWidth label="Результат" value={leadDraft.result} onChange={(event) => onLeadDraftChange({ ...leadDraft, result: event.target.value })} />
         <TextField fullWidth label="Организация" value={draft.organization} onChange={(event) => onDraftChange({ ...draft, organization: event.target.value })} />
       </Stack>
-      <Stack direction={{ xs: 'column', sm: 'row' }} gap={1.5}>
-        <TextField label="Регион" value={draft.region} onChange={(event) => onDraftChange({ ...draft, region: event.target.value })} sx={{ flex: 3 }} helperText={localTime
-          ? <Tooltip title={regionTimeHint(localTime)}><Typography variant="caption" color={localTime.outsideWorkingHours ? 'warning.main' : 'text.secondary'}>{localTime.time}, {localTime.offsetLabel}</Typography></Tooltip>
+      <Stack direction={{ xs: 'column', sm: 'row' }} flexWrap="wrap" gap={1.5}>
+        <TextField label="Регион" value={draft.region} onChange={(event) => onDraftChange({ ...draft, region: event.target.value })} sx={{ flex: 4, minWidth: tokens.size.fieldMin }} helperText={localTime
+          ? <Tooltip title={regionTimeHint(localTime)}><Typography variant="caption" color={localTime.workday === 'open' ? 'text.secondary' : 'warning.main'}>{localTime.time}, {localTime.offsetLabel}{regionTimeMark(localTime)}</Typography></Tooltip>
           : undefined} />
-        <TextField label="Адрес" value={draft.address} onChange={(event) => onDraftChange({ ...draft, address: event.target.value })} sx={{ flex: 4 }} />
-        <TextField label="Телефон" value={draft.phone} onChange={(event) => onDraftChange({ ...draft, phone: event.target.value })} sx={{ flex: 5 }} slotProps={{ input: { endAdornment: (
+        <TextField label="Адрес" value={draft.address} onChange={(event) => onDraftChange({ ...draft, address: event.target.value })} sx={{ flex: 4, minWidth: tokens.size.fieldMin }} />
+        <TextField label="Телефон" value={draft.phone} onChange={(event) => onDraftChange({ ...draft, phone: event.target.value })} sx={{ flex: 5, minWidth: tokens.size.fieldMin }} slotProps={{ input: { endAdornment: (
           <InputAdornment position="end">
             <Tooltip title="Скопировать номер"><Box component="span"><IconButton size="small" aria-label="Скопировать номер" disabled={!telHref} onClick={onCopyPhone}><ContentCopyOutlined fontSize="small" /></IconButton></Box></Tooltip>
             <Tooltip title="Позвонить"><Box component="span"><IconButton size="small" aria-label="Позвонить" color="primary" disabled={!telHref} href={telHref}><PhoneOutlined fontSize="small" /></IconButton></Box></Tooltip>
@@ -65,6 +66,7 @@ export function ContactFields({ draft, leadDraft, createdAt, customFields, onDra
         ) } }} />
       </Stack>
       <TextField fullWidth multiline minRows={3} label="Комментарий" value={leadDraft.description} onChange={(event) => onLeadDraftChange({ ...leadDraft, description: event.target.value })} />
+      {recordings}
       <Stack direction="row" gap={1} alignItems="baseline">
         <Typography variant="body2" color="text.secondary">Дата</Typography>
         <Typography variant="body2">{formatShortDate(createdAt)}</Typography>

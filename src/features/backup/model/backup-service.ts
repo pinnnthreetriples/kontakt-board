@@ -12,6 +12,7 @@ const contactSchema = z.object({
 const leadSchema = z.object({
   id: z.string(), contactId: z.string(), stageId: z.string(), externalId: z.string(), externalKey: z.string().optional(), source: z.string(),
   result: z.string(), description: z.string(), assignee: z.string(), priority: z.enum(['low', 'normal', 'high']).optional(),
+  deadline: z.iso.date().optional(),
   createdAt: dateString, updatedAt: dateString,
 });
 const tagSchema = z.object({ id: z.string(), name: z.string(), color: z.string() });
@@ -155,7 +156,9 @@ export async function restoreBackup(file: File): Promise<void> {
   const data = normalizeRestoredData(parsed.data);
   assertReferences(data);
   await db.transaction('rw', db.tables, async () => {
-    await Promise.all(db.tables.map((table) => table.clear()));
+    // Записи разговоров в копию не входят (их не унести в JSON), поэтому таблица не чистится:
+    // иначе восстановление копии стирало бы аудио, которое заново взять негде.
+    await Promise.all(db.tables.filter((table) => table.name !== 'recordings').map((table) => table.clear()));
     await db.contacts.bulkAdd(data.contacts);
     await db.leads.bulkAdd(data.leads);
     await db.stages.bulkAdd(data.stages);
@@ -167,6 +170,8 @@ export async function restoreBackup(file: File): Promise<void> {
     await db.preferences.bulkAdd(data.preferences);
     // restoreBackup чистит все таблицы, поэтому справочник тегов надо вернуть явно.
     await db.tags.bulkAdd(data.tags ?? []);
+    const restoredLeadIds = new Set(data.leads.map((lead) => lead.id));
+    await db.recordings.filter((recording) => !restoredLeadIds.has(recording.leadId)).delete();
   });
 }
 

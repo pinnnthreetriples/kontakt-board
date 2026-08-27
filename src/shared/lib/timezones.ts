@@ -64,12 +64,22 @@ const MSK_UTC_OFFSET = 3;
 const WORK_START_HOUR = 9;
 const WORK_END_HOUR = 20;
 
+type Workday = 'open' | 'before' | 'after';
+
 interface RegionTime {
   offsetLabel: string;
   time: string;
-  outsideWorkingHours: boolean;
+  workday: Workday;
   multiZone: boolean;
 }
+
+// Граница рабочего дня называется прямо: «звонить неудобно» читалось как намёк
+// на разницу часовых поясов, хотя дело в часе суток.
+const WORKDAY_HINTS: Record<Workday, string> = {
+  open: '',
+  before: `, рабочий день начнётся в ${WORK_START_HOUR}:00`,
+  after: `, рабочий день закончился в ${WORK_END_HOUR}:00`,
+};
 
 export function describeRegionTime(region: string, now: number): RegionTime | null {
   const key = normalize(region);
@@ -81,14 +91,17 @@ export function describeRegionTime(region: string, now: number): RegionTime | nu
   return {
     offsetLabel: offset === 0 ? 'МСК' : `МСК${offset > 0 ? '+' : '−'}${Math.abs(offset)}`,
     time: `${String(hours).padStart(2, '0')}:${String(local.getUTCMinutes()).padStart(2, '0')}`,
-    outsideWorkingHours: hours < WORK_START_HOUR || hours >= WORK_END_HOUR,
+    workday: hours < WORK_START_HOUR ? 'before' : hours >= WORK_END_HOUR ? 'after' : 'open',
     multiZone: MULTI_ZONE.has(key),
   };
 }
 
+/** Короткая пометка рядом со временем: смысл нельзя передавать одним цветом. */
+export function regionTimeMark(value: RegionTime): string {
+  return value.workday === 'open' ? '' : ', нерабочее время';
+}
+
 export function regionTimeHint(value: RegionTime): string {
-  const base = value.outsideWorkingHours
-    ? `Местное время ${value.time} — звонить неудобно`
-    : `Местное время ${value.time}`;
+  const base = `Местное время ${value.time}${WORKDAY_HINTS[value.workday]}`;
   return value.multiZone ? `${base}. В регионе несколько часовых поясов` : base;
 }

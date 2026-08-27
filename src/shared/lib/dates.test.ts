@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { callDateLabel, formatDateTime, formatDayLabel, formatShortDate, formatTime, isOverdue, toDateInputValue } from './dates';
+import { callDateLabel, formatDateTime, formatDateTimeValue, formatDateValue, formatDayLabel, formatShortDate, formatTime, isDeadlineOverdue, isOverdue, parseDateValue, toDateInputValue } from './dates';
 
 // Даты собираются в местном поясе и форматируются в нём же, поэтому тест
 // одинаково работает и в Москве, и в UTC на CI.
@@ -29,6 +29,36 @@ describe('callDateLabel', () => {
 
   it('для остальных дат показывает полную подпись', () => {
     expect(callDateLabel(local(2026, 8, 26, 19, 5).toISOString(), local(2026, 1, 1))).toBe('26 авг., 19:05');
+  });
+});
+
+describe('значения для пикеров', () => {
+  it('переводит строку в дату и обратно', () => {
+    const date = parseDateValue('2026-08-31');
+    expect(date).toEqual(local(2026, 8, 31));
+    expect(formatDateValue(date)).toBe('2026-08-31');
+    expect(formatDateTimeValue(local(2026, 8, 31, 9, 5))).toBe('2026-08-31T09:05');
+  });
+
+  it('пустое и некорректное значение считает «не задано»', () => {
+    expect(parseDateValue('')).toBeNull();
+    expect(parseDateValue('не дата')).toBeNull();
+    expect(formatDateValue(null)).toBe('');
+    expect(formatDateValue(new Date(Number.NaN))).toBe('');
+    expect(formatDateTimeValue(null)).toBe('');
+  });
+});
+
+describe('isDeadlineOverdue', () => {
+  it('срок сравнивается по дню, а не по времени', () => {
+    const now = local(2026, 8, 26, 12, 0);
+    expect(isDeadlineOverdue('2026-08-25', now)).toBe(true);
+    expect(isDeadlineOverdue('2026-08-26', now)).toBe(false);
+    expect(isDeadlineOverdue('2026-08-27', now)).toBe(false);
+  });
+
+  it('пустой срок не считается просроченным', () => {
+    expect(isDeadlineOverdue('', local(2026, 8, 26))).toBe(false);
   });
 });
 

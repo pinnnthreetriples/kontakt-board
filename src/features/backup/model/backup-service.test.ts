@@ -44,6 +44,17 @@ describe('restoreBackup', () => {
     expect(await db.stages.count()).toBe(6);
   });
 
+  it('сохраняет крайний срок заявки в копии', async () => {
+    const lead = (await db.leads.toArray())[0]!;
+    await db.leads.update(lead.id, { deadline: '2026-09-01' });
+    const json = await createBackupPayload();
+    await db.leads.update(lead.id, { deadline: undefined });
+
+    await restoreBackup(backupFile(json));
+
+    expect((await db.leads.get(lead.id))?.deadline).toBe('2026-09-01');
+  });
+
   it('отклоняет файл неверного формата', async () => {
     const json = JSON.stringify({ version: 999, data: {} });
     await expect(restoreBackup(backupFile(json, 'bad.json'))).rejects.toBeDefined();

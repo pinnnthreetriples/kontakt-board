@@ -40,7 +40,6 @@ import { Toast } from '../../shared/ui/Toast';
 
 // Уведомления о состоянии висят дольше обычных: в них есть кнопка действия,
 // и на её прочтение нужно время.
-const STATE_NOTICE_MS = 12_000;
 
 const navigation = [
   { to: '/board', label: 'Канбан', icon: DashboardOutlined },
@@ -158,7 +157,6 @@ export function AppShell() {
         <Toast
           open
           severity="warning"
-          autoHideDuration={STATE_NOTICE_MS}
           message={!storagePersistent ? 'Браузер может очистить данные приложения' : 'Резервная копия старше недели'}
           onClose={() => setStorageNoticeClosed(true)}
           action={<Button size="small" color="inherit" disabled={backupBusy} onClick={() => void downloadBackup()}>{backupBusy ? 'Скачивание…' : 'Скачать копию'}</Button>}
@@ -167,7 +165,6 @@ export function AppShell() {
         <Toast
           open
           severity={overdueCount > 0 ? 'error' : 'info'}
-          autoHideDuration={STATE_NOTICE_MS}
           message={overdueCount > 0 ? `Просрочено звонков: ${overdueCount}` : `Скоро звонков: ${notificationCount}`}
           onClose={() => setDismissedCallsCount(notificationCount)}
           action={<Button size="small" color="inherit" onClick={() => { void navigate('/calls'); }}>Открыть</Button>}

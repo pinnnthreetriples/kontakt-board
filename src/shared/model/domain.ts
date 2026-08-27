@@ -30,6 +30,8 @@ export interface Lead {
   description: string;
   assignee: string;
   priority?: LeadPriority;
+  /** Крайний срок работы с заявкой, дата в формате YYYY-MM-DD. */
+  deadline?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -73,6 +75,15 @@ export interface CallTask {
   note: string;
   completedAt?: string;
   createdAt: string;
+}
+
+export interface CallRecording {
+  id: string;
+  leadId: string;
+  fileName: string;
+  /** Время звонка из имени файла кол-центра, иначе время загрузки. */
+  recordedAt: string;
+  blob: Blob;
 }
 
 export type CustomFieldType = 'text' | 'number' | 'date' | 'select' | 'boolean';

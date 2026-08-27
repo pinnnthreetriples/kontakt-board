@@ -17,18 +17,21 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
+import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../../infrastructure/database/database';
 import { tokens } from '../../../shared/design-system/tokens';
-import { formatDateTime, toDateInputValue } from '../../../shared/lib/dates';
+import { formatDateTime, formatDateTimeValue, formatDateValue, parseDateValue, toDateInputValue } from '../../../shared/lib/dates';
 import { addComment, deleteLead, moveLead, saveLeadCard, scheduleCall, setLeadPriority } from '../../../entities/lead/model/lead-service';
 import type { Contact } from '../../../shared/model/domain';
-import { EMPTY_DRAFT, EMPTY_LEAD_DRAFT, type ContactDraft, type LeadDraft } from '../model/drafts';
+import { EMPTY_DRAFT, leadDraftFrom, type ContactDraft, type LeadDraft } from '../model/drafts';
 import { SendProposalDialog } from '../../send-proposal/ui/SendProposalDialog';
 import { Toast } from '../../../shared/ui/Toast';
 import { ContactFields } from './ContactFields';
 import { EditableTitle } from './EditableTitle';
 import { LeadChat, type ChatEntry } from './LeadChat';
+import { LeadRecordings } from './LeadRecordings';
 import { PrioritySelect } from './PrioritySelect';
 import { StagePipeline } from './StagePipeline';
 import { TagBar } from './TagBar';
@@ -103,7 +106,7 @@ export function ContactDrawer({ leadId, onClose }: ContactDrawerProps) {
   const [draft, setDraft] = useState<ContactDraft | null>(null);
   const [leadDraft, setLeadDraft] = useState<LeadDraft | null>(null);
   const contactDraft = draft ?? toContactDraft(data?.contact);
-  const currentLeadDraft = leadDraft ?? (data?.lead ? { result: data.lead.result, description: data.lead.description, assignee: data.lead.assignee } : EMPTY_LEAD_DRAFT);
+  const currentLeadDraft = leadDraft ?? leadDraftFrom(data?.lead);
   const dirty = draft !== null || leadDraft !== null || Boolean(callNote.trim()) || callDate !== callBaseline;
 
   function requestClose() {
@@ -180,30 +183,56 @@ export function ContactDrawer({ leadId, onClose }: ContactDrawerProps) {
           />
         </Box>
         <Divider />
-        <Stack direction={{ xs: 'column', md: 'row' }} gap={3} mt={2.5} divider={<Divider orientation="vertical" flexItem sx={{ display: { xs: 'none', md: 'block' } }} />}>
-          <Stack flex={1} minWidth={tokens.size.zero} gap={2}>
-            <Typography variant="subtitle1">Назначить звонок</Typography>
-            <Stack direction={{ xs: 'column', sm: 'row' }} gap={1.5} alignItems={{ sm: 'center' }}>
-              <TextField type="datetime-local" label="Дата и время" value={callDate} onChange={(event) => setCallDate(event.target.value)} sx={{ minWidth: { xs: tokens.size.zero, sm: tokens.size.callInput } }} slotProps={{ inputLabel: { shrink: true } }} />
-              <TextField fullWidth label="Тема звонка" value={callNote} onChange={(event) => setCallNote(event.target.value)} />
-              <Button variant="outlined" startIcon={<CalendarTodayOutlined />} disabled={busyAction !== null} onClick={() => void submitCall()} sx={{ flexShrink: 0 }}>{busyAction === 'call' ? 'Добавление…' : 'Добавить'}</Button>
+        <Stack
+          direction={{ xs: 'column', md: 'row' }}
+          gap={3}
+          mt={2.5}
+          divider={<Divider orientation="vertical" flexItem sx={{ display: { xs: 'none', md: 'block' } }} />}
+          sx={{ height: { md: tokens.size.cardPane }, minHeight: { md: tokens.size.cardPaneMin } }}
+        >
+          <Stack flex={3} minWidth={tokens.size.zero} sx={{ minHeight: tokens.size.zero }}>
+            {/* Панель прокручивается сама: раскрытые поля не должны удлинять карточку и уносить чат вниз. */}
+            <Stack gap={2} sx={{ flex: 1, minHeight: tokens.size.zero, overflowY: { md: 'auto' }, pr: { md: 1 }, pt: 1 }}>
+              {/* Крайний срок — про заявку, а не про звонок, поэтому стоит выше формы звонка. */}
+              <DatePicker
+                label="Крайний срок"
+                format="dd.MM.yyyy"
+                value={parseDateValue(currentLeadDraft.deadline)}
+                disabled={busyAction !== null}
+                onChange={(value) => setLeadDraft({ ...currentLeadDraft, deadline: formatDateValue(value) })}
+                sx={{ maxWidth: tokens.size.callInput }}
+              />
+              <Typography variant="subtitle1">Назначить звонок</Typography>
+              <Stack direction={{ xs: 'column', sm: 'row' }} flexWrap="wrap" gap={1.5} alignItems={{ sm: 'center' }}>
+                <DateTimePicker
+                  label="Дата и время"
+                  format="dd.MM.yyyy HH:mm"
+                  ampm={false}
+                  value={parseDateValue(callDate)}
+                  onChange={(value) => setCallDate(formatDateTimeValue(value))}
+                  sx={{ minWidth: { xs: tokens.size.zero, sm: tokens.size.callInput } }}
+                />
+                <TextField label="Тема звонка" value={callNote} onChange={(event) => setCallNote(event.target.value)} sx={{ flex: 1, minWidth: tokens.size.fieldMin }} />
+                <Button variant="outlined" startIcon={<CalendarTodayOutlined />} loading={busyAction === 'call'} loadingPosition="start" disabled={busyAction !== null} onClick={() => void submitCall()} sx={{ flexShrink: 0 }}>Добавить</Button>
+              </Stack>
+              {callError && <Typography variant="body2" color="error">{callError}</Typography>}
+              {activeCalls.length > 0 && <Stack direction="row" gap={1} flexWrap="wrap">{activeCalls.map((call) => <Chip key={call.id} size="small" icon={<CalendarTodayOutlined />} label={`${formatDateTime(call.dueAt)}${call.note ? `, ${call.note}` : ''}`} variant="outlined" />)}</Stack>}
+              <Divider />
+              <ContactFields
+                draft={contactDraft}
+                leadDraft={currentLeadDraft}
+                createdAt={data.lead.createdAt}
+                customFields={data.customFields}
+                onDraftChange={setDraft}
+                onLeadDraftChange={setLeadDraft}
+                onCopyPhone={copyPhone}
+                onSendProposal={() => setProposalOpen(true)}
+                recordings={<LeadRecordings leadId={data.lead.id} />}
+              />
             </Stack>
-            {callError && <Typography variant="body2" color="error">{callError}</Typography>}
-            {activeCalls.length > 0 && <Stack direction="row" gap={1} flexWrap="wrap">{activeCalls.map((call) => <Chip key={call.id} size="small" icon={<CalendarTodayOutlined />} label={`${formatDateTime(call.dueAt)}${call.note ? `, ${call.note}` : ''}`} variant="outlined" />)}</Stack>}
-            <Divider />
-            <ContactFields
-              draft={contactDraft}
-              leadDraft={currentLeadDraft}
-              createdAt={data.lead.createdAt}
-              customFields={data.customFields}
-              onDraftChange={setDraft}
-              onLeadDraftChange={setLeadDraft}
-              onCopyPhone={copyPhone}
-              onSendProposal={() => setProposalOpen(true)}
-            />
-            <Button startIcon={<SaveOutlined />} variant="outlined" disabled={!dirty || busyAction !== null} onClick={() => void saveContact()} sx={{ alignSelf: 'flex-start' }}>{busyAction === 'save' ? 'Сохранение…' : 'Сохранить изменения'}</Button>
+            <Button startIcon={<SaveOutlined />} variant="outlined" loading={busyAction === 'save'} loadingPosition="start" disabled={!dirty || busyAction !== null} onClick={() => void saveContact()} sx={{ alignSelf: 'flex-start', mt: 2 }}>Сохранить изменения</Button>
           </Stack>
-          <Stack flex={1} minWidth={tokens.size.zero} gap={1}>
+          <Stack flex={2} minWidth={tokens.size.zero} gap={1} sx={{ minHeight: tokens.size.zero }}>
             <Typography variant="subtitle1">Обсуждение</Typography>
             {/* Чат — соседняя колонка, а не вкладка: сохранение карточки не должно его блокировать. */}
             <LeadChat entries={data.chat} currentAuthor={data.author} busy={busyAction === 'delete'} onSend={(text) => addComment(data.lead.id, text)} />
@@ -212,7 +241,7 @@ export function ContactDrawer({ leadId, onClose }: ContactDrawerProps) {
       </DialogContent>
       {proposalOpen && <SendProposalDialog leadId={data.lead.id} phone={contactDraft.phone} onClose={() => setProposalOpen(false)} />}
       <Dialog open={confirmClose} onClose={() => setConfirmClose(false)} aria-labelledby="confirm-close-title"><DialogTitle id="confirm-close-title">Закрыть без сохранения?</DialogTitle><DialogContent><Typography>Несохранённые изменения будут потеряны.</Typography></DialogContent><DialogActions><Button onClick={() => setConfirmClose(false)}>Продолжить редактирование</Button><Button color="error" onClick={onClose}>Закрыть</Button></DialogActions></Dialog>
-      <Dialog open={confirmDelete} onClose={() => { if (busyAction !== 'delete') setConfirmDelete(false); }} aria-labelledby="confirm-delete-title"><DialogTitle id="confirm-delete-title">Удалить заявку?</DialogTitle><DialogContent><Typography>Заявка «{data.contact.organization || data.contact.personName || 'Без названия'}», её комментарии, история и звонки будут удалены навсегда. Отменить это нельзя.</Typography></DialogContent><DialogActions><Button disabled={busyAction === 'delete'} onClick={() => setConfirmDelete(false)}>Отмена</Button><Button color="error" variant="contained" disabled={busyAction === 'delete'} onClick={() => void removeLead()}>{busyAction === 'delete' ? 'Удаление…' : 'Удалить'}</Button></DialogActions></Dialog>
+      <Dialog open={confirmDelete} onClose={() => { if (busyAction !== 'delete') setConfirmDelete(false); }} aria-labelledby="confirm-delete-title"><DialogTitle id="confirm-delete-title">Удалить заявку?</DialogTitle><DialogContent><Typography>Заявка «{data.contact.organization || data.contact.personName || 'Без названия'}», её комментарии, история и звонки будут удалены навсегда. Отменить это нельзя.</Typography></DialogContent><DialogActions><Button disabled={busyAction === 'delete'} onClick={() => setConfirmDelete(false)}>Отмена</Button><Button color="error" variant="contained" loading={busyAction === 'delete'} onClick={() => void removeLead()}>Удалить</Button></DialogActions></Dialog>
     </Dialog>
   );
 }

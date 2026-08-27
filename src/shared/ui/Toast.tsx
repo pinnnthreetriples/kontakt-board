@@ -8,8 +8,6 @@ type ToastProps = {
   severity: AlertColor;
   message: ReactNode;
   onClose: () => void;
-  /** `null` — уведомление о состоянии: живёт, пока пользователь не закроет его сам. */
-  autoHideDuration?: number | null;
   action?: ReactNode;
 };
 
@@ -28,12 +26,14 @@ const SEVERITY_ICONS: Record<AlertColor, ReactNode> = {
  * а положение тостов обязано быть одинаковым во всём приложении. Обёртка
  * фиксирует правый нижний угол и добавляет кнопку закрытия рядом с действием.
  */
-export function Toast({ open, severity, message, onClose, autoHideDuration = 6_000, action }: ToastProps) {
+const TOAST_MS = 3_000;
+
+export function Toast({ open, severity, message, onClose, action }: ToastProps) {
   return (
     <Snackbar
       open={open}
       anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-      autoHideDuration={autoHideDuration}
+      autoHideDuration={TOAST_MS}
       onClose={(_, reason) => { if (reason !== 'clickaway') onClose(); }}
       slotProps={{ content: { role: 'alert' } }}
       message={<Stack direction="row" alignItems="center" gap={1}>{SEVERITY_ICONS[severity]}{message}</Stack>}

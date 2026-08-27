@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { leadCard, openFreshLeadCard, seriousAccessibilityIssues } from './helpers';
+import { leadCard, openApp, openFreshLeadCard, seriousAccessibilityIssues } from './helpers';
 
 test('этап меняется кликом по кружку пайплайна, а по подписи — нет', async ({ page }) => {
   const card = await openFreshLeadCard(page, 'Клуб Этап', '+7 909 322-87-21');
@@ -93,4 +93,20 @@ test('открытая карточка заявки не содержит се�
   const card = await openFreshLeadCard(page, 'Клуб Доступность', '+7 909 322-87-27');
   await expect(card.getByRole('button', { name: 'Изменить теги' })).toBeVisible();
   expect(await seriousAccessibilityIssues(page)).toEqual([]);
+});
+
+test('крайний срок сохраняется и виден на канбане', async ({ page }) => {
+  const card = await openFreshLeadCard(page, 'Клуб Срок', '+7 909 322-87-72');
+  const deadline = card.getByRole('group', { name: 'Крайний срок' });
+  await deadline.click();
+  await page.keyboard.press('ArrowLeft');
+  await page.keyboard.press('ArrowLeft');
+  await page.keyboard.type('31082026');
+  await expect(deadline).toHaveText(/31\.08\.2026/);
+  await card.getByRole('button', { name: 'Сохранить изменения' }).click();
+  await expect(card.getByText('Изменения сохранены.')).toBeVisible();
+  await card.getByRole('button', { name: 'Закрыть', exact: true }).click();
+
+  await openApp(page, '/board');
+  await expect(page.getByText('Срок: 31.08.2026')).toBeVisible();
 });

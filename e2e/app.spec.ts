@@ -39,6 +39,7 @@ test('импорт показывает дубль, сохраняет карт�
   await expect(page.getByText('Обновятся: 1')).toBeVisible();
   await page.getByRole('button', { name: 'Импортировать 2' }).click();
   await expect(page.getByRole('heading', { name: 'Импорт завершён' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Записи разговоров' })).toBeInViewport();
   await page.getByRole('link', { name: 'Канбан' }).click();
   await expect(page.getByText('Клуб Тайфун обновлён')).toBeVisible();
   await page.reload();

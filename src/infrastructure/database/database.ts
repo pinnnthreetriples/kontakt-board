@@ -2,6 +2,7 @@ import Dexie, { type EntityTable, type Transaction } from 'dexie';
 import type {
   ActivityItem,
   AppPreferences,
+  CallRecording,
   CallTask,
   Contact,
   ContactComment,
@@ -28,6 +29,8 @@ const DATABASE_SCHEMA = {
 const SCHEMA_WITH_TAGS = { ...DATABASE_SCHEMA, tags: 'id, &name' };
 
 const SCHEMA_WITH_PRIORITY = { ...SCHEMA_WITH_TAGS, leads: `${DATABASE_SCHEMA.leads}, priority` };
+
+const SCHEMA_WITH_RECORDINGS = { ...SCHEMA_WITH_PRIORITY, recordings: 'id, leadId, fileName, recordedAt' };
 
 async function repairStageInvariants(transaction: Transaction): Promise<void> {
   const stagesTable = transaction.table<Stage, string>('stages');
@@ -65,6 +68,7 @@ export class ContactBoardDatabase extends Dexie {
   importJobs!: EntityTable<ImportJob, 'id'>;
   preferences!: EntityTable<AppPreferences, 'id'>;
   tags!: EntityTable<Tag, 'id'>;
+  recordings!: EntityTable<CallRecording, 'id'>;
 
   constructor(name = 'contact-board') {
     super(name);
@@ -135,6 +139,8 @@ export class ContactBoardDatabase extends Dexie {
         lead.priority ??= 'normal';
       });
     });
+    // Записи разговоров из кол-центра: таблица новая, переносить нечего.
+    this.version(8).stores(SCHEMA_WITH_RECORDINGS);
   }
 }
 
