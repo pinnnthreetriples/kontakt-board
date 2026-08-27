@@ -1,5 +1,6 @@
 {
   "$schema": "https://unpkg.com/knip@5/schema.json",
   "project": ["src/**/*.{ts,tsx}", "e2e/**/*.ts"],
-  "ignoreDependencies": ["@fontsource-variable/inter"]
+  "ignoreDependencies": ["@fontsource-variable/inter"],
+  "ignoreBinaries": ["python"]
 }
