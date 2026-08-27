@@ -111,6 +111,11 @@ function contactChanges(values: Partial<ContactCardValues>): Partial<ContactCard
   };
 }
 
+// История заявки отражает реальные правки: сохранение тех же значений — не событие.
+function unchanged<T extends object>(current: T, next: Partial<T>): boolean {
+  return Object.entries(next).every(([key, value]) => JSON.stringify(current[key as keyof T]) === JSON.stringify(value));
+}
+
 async function checkedPhone(contactId: string, phone: string): Promise<string> {
   const normalizedPhone = normalizePhone(phone);
   if (phone.trim() && normalizedPhone.length < 10) throw new InvalidPhoneError();
@@ -147,10 +152,12 @@ export async function saveLeadCard(leadId: string, contactValues: ContactCardVal
     if (!lead) throw new LeadNotFoundError();
     const contact = await db.contacts.get(lead.contactId);
     if (!contact) throw new LeadNotFoundError();
-    const normalizedPhone = await checkedPhone(contact.id, contactValues.phone);
-    await db.contacts.update(contact.id, { ...contactChanges(contactValues), normalizedPhone, updatedAt: now });
+    const contactUpdate = { ...contactChanges(contactValues), normalizedPhone: await checkedPhone(contact.id, contactValues.phone) };
     // Пустая строка из поля даты означает «срок не задан», в базе такого ключа быть не должно.
-    await db.leads.update(lead.id, { ...leadValues, deadline: leadValues.deadline?.trim() || undefined, updatedAt: now });
+    const leadUpdate = { ...leadValues, deadline: leadValues.deadline?.trim() || undefined };
+    if (unchanged(contact, contactUpdate) && unchanged(lead, leadUpdate)) return;
+    await db.contacts.update(contact.id, { ...contactUpdate, updatedAt: now });
+    await db.leads.update(lead.id, { ...leadUpdate, updatedAt: now });
     await db.activities.add({ id: createId(), leadId, kind: 'updated', text: 'Карточка изменена', author, createdAt: now });
   });
 }
@@ -245,10 +252,9 @@ export async function completeCallAndMoveLead(callId: string, stageId: string): 
     if (!lead) throw new LeadNotFoundError();
     await db.calls.update(call.id, { completedAt: now });
     await db.leads.update(lead.id, { stageId: stage.id, updatedAt: now });
-    await db.activities.bulkAdd([
-      { id: createId(), leadId: lead.id, kind: 'call_completed', text: 'Звонок завершён: не дозвонились', author, createdAt: now },
-      { id: createId(), leadId: lead.id, kind: 'stage_changed', text: `Этап изменён на «${stage.name}»`, author, createdAt: now },
-    ]);
+    const activities: ActivityItem[] = [{ id: createId(), leadId: lead.id, kind: 'call_completed', text: 'Звонок завершён: не дозвонились', author, createdAt: now }];
+    if (lead.stageId !== stage.id) activities.push({ id: createId(), leadId: lead.id, kind: 'stage_changed', text: `Этап изменён на «${stage.name}»`, author, createdAt: now });
+    await db.activities.bulkAdd(activities);
   });
 }
 
