@@ -119,7 +119,7 @@ export function CallsPage() {
       {globalError ? (
         <Toast open severity="error" message={globalError.message} onClose={() => setActionError(null)} />
       ) : (
-        <Toast open={Boolean(undoAction)} severity="success" message="Действие со звонком выполнено" onClose={() => setUndoAction(null)} action={<Button size="small" color="inherit" onClick={() => { if (undoAction) void runAction(undoAction.callId, async () => { await undoCallCompletion(undoAction.callId, undoAction.previousStageId); setUndoAction(null); }); }}>Отменить</Button>} />
+        <Toast open={Boolean(undoAction)} severity="success" autoHideDuration={8_000} message="Действие со звонком выполнено" onClose={() => setUndoAction(null)} action={<Button size="small" color="inherit" onClick={() => { if (undoAction) void runAction(undoAction.callId, async () => { await undoCallCompletion(undoAction.callId, undoAction.previousStageId); setUndoAction(null); }); }}>Отменить</Button>} />
       )}
     </Box>
   );

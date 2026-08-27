@@ -50,14 +50,26 @@ describe('suggestMapping', () => {
       position: 'Должность', description: 'Комментарий', phone: 'Телефон, на который звонили',
       email: 'E-mail основного контакта', address: 'Адрес', region: 'Регион', website: 'Сайт',
       assignee: 'Сотрудник', createdAt: 'Дата', externalId: 'ID записи',
+      tags: 'Теги', secondaryPhone: 'Телефон основного контакта',
     });
-    expect(mapping.tags).toBeUndefined();
     expect(mapping.initialComment).toBeUndefined();
+  });
+
+  it('второй телефонный столбец уходит в дополнительный телефон', () => {
+    const mapping = suggestMapping(['Телефон, на который звонили', 'Телефон основного контакта']);
+    expect(mapping.phone).toBe('Телефон, на который звонили');
+    expect(mapping.secondaryPhone).toBe('Телефон основного контакта');
+  });
+
+  it('подставляет столбец с тегами', () => {
+    expect(suggestMapping(['Телефон', 'Теги']).tags).toBe('Теги');
+    expect(suggestMapping(['Телефон', 'Тег кампании']).tags).toBe('Тег кампании');
   });
 
   it('не отдаёт один столбец двум полям', () => {
     const mapping = suggestMapping(['Телефон основного контакта', 'Описание контакта']);
     expect(mapping.phone).toBe('Телефон основного контакта');
+    expect(mapping.secondaryPhone).toBeUndefined();
     expect(mapping.personName).toBeUndefined();
   });
 });
