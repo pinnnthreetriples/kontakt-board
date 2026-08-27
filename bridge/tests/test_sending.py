@@ -36,6 +36,7 @@ class FakeClient:
         self.contact = FakeContact(200, "Иван Петров") if contact is _DEFAULT_CONTACT else contact
         self.send_error = send_error
         self.sent: list[tuple[int, str]] = []
+        self.chat_calls: list[tuple[int, int]] = []
         self.me = type("Profile", (), {"contact": FakeContact(100, "Оператор")})()
 
     async def search_by_phone(self, phone: str) -> Any:
@@ -44,7 +45,11 @@ class FakeClient:
         return self.contact
 
     def get_chat_id(self, first_user_id: int, second_user_id: int) -> int:
-        return first_user_id * 1000 + second_user_id
+        # Настоящий PyMax считает id чата как XOR. Двойник намеренно возвращает
+        # константу: проверять надо, что в отправку ушёл именно этот чат, а не
+        # повторять формулу библиотеки в тесте.
+        self.chat_calls.append((first_user_id, second_user_id))
+        return 987654
 
     async def send_text_exact(self, chat_id: int, text: str) -> Any:
         if self.send_error is not None:
@@ -76,7 +81,9 @@ class SendingTests(unittest.TestCase):
         client = FakeClient()
         result = self.send(client)
         self.assertIs(result.status, ResultStatus.SENT)
-        self.assertEqual(client.sent, [(100200, "КП на монтаж")])
+        # Чат берётся у MAX по паре «я, получатель», и текст уходит именно в него.
+        self.assertEqual(client.chat_calls, [(100, 200)])
+        self.assertEqual(client.sent, [(987654, "КП на монтаж")])
 
     def test_same_text_is_not_sent_twice(self) -> None:
         client = FakeClient()
