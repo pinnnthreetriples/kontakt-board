@@ -127,6 +127,25 @@ describe('lead-service', () => {
     expect(await db.activities.where('leadId').equals(lead.id).count()).toBe(1);
   });
 
+  it('не пишет историю, если карточку сохранили без изменений', async () => {
+    const lead = (await db.leads.toArray())[0]!;
+    const contact = (await db.contacts.get(lead.contactId))!;
+    await saveLeadCard(lead.id, cardValues(contact), leadValues(lead));
+    expect(await db.activities.where('leadId').equals(lead.id).count()).toBe(0);
+    expect((await db.leads.get(lead.id))?.updatedAt).toBe(lead.updatedAt);
+  });
+
+  it('не пишет «этап изменён», если звонок завершается в текущем этапе', async () => {
+    const lead = (await db.leads.toArray())[0]!;
+    await moveLead(lead.id, 'stage-no-answer');
+    await scheduleCall(lead.id, new Date(Date.now() + 86_400_000).toISOString(), 'Позвонить');
+    const call = (await db.calls.toArray())[0]!;
+    await completeCallAndMoveLead(call.id, 'stage-no-answer');
+    const stageChanges = (await db.activities.where('leadId').equals(lead.id).toArray()).filter((item) => item.kind === 'stage_changed');
+    expect(stageChanges).toHaveLength(1);
+    expect((await db.calls.get(call.id))?.completedAt).toBeTruthy();
+  });
+
   it('сохраняет крайний срок и снимает его пустым значением', async () => {
     const lead = (await db.leads.toArray())[0]!;
     const contact = (await db.contacts.get(lead.contactId))!;

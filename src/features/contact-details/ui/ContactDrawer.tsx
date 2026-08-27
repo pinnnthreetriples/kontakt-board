@@ -25,7 +25,7 @@ import { tokens } from '../../../shared/design-system/tokens';
 import { formatDateTime, formatDateTimeValue, formatDateValue, parseDateValue, toDateInputValue } from '../../../shared/lib/dates';
 import { addComment, deleteLead, moveLead, saveLeadCard, scheduleCall, setLeadPriority } from '../../../entities/lead/model/lead-service';
 import type { Contact } from '../../../shared/model/domain';
-import { EMPTY_DRAFT, leadDraftFrom, type ContactDraft, type LeadDraft } from '../model/drafts';
+import { EMPTY_DRAFT, leadDraftFrom, sameValues, type ContactDraft, type LeadDraft } from '../model/drafts';
 import { SendProposalDialog } from '../../send-proposal/ui/SendProposalDialog';
 import { Toast } from '../../../shared/ui/Toast';
 import { ContactFields } from './ContactFields';
@@ -94,7 +94,6 @@ function cardLabel(organization: string): string {
 export function ContactDrawer({ leadId, onClose }: ContactDrawerProps) {
   const data = useLiveQuery(() => loadContactDetails(leadId), [leadId]);
   const [callDate, setCallDate] = useState(nextCallDate);
-  const [callBaseline, setCallBaseline] = useState(callDate);
   const [callNote, setCallNote] = useState('');
   const [callError, setCallError] = useState('');
   const [actionError, setActionError] = useState('');
@@ -105,12 +104,18 @@ export function ContactDrawer({ leadId, onClose }: ContactDrawerProps) {
   const [proposalOpen, setProposalOpen] = useState(false);
   const [draft, setDraft] = useState<ContactDraft | null>(null);
   const [leadDraft, setLeadDraft] = useState<LeadDraft | null>(null);
-  const contactDraft = draft ?? toContactDraft(data?.contact);
+  // Теги правит TagBar сразу в базе, поэтому черновик всегда берёт их оттуда: иначе
+  // сохранение карточки вернуло бы снимок тегов, сделанный при первой правке поля.
+  const contactDraft = { ...(draft ?? toContactDraft(data?.contact)), tags: data?.contact.tags ?? EMPTY_DRAFT.tags };
   const currentLeadDraft = leadDraft ?? leadDraftFrom(data?.lead);
-  const dirty = draft !== null || leadDraft !== null || Boolean(callNote.trim()) || callDate !== callBaseline;
+  // Черновик сравнивается с базой по значению, а не по факту правки: кнопка гаснет,
+  // когда поля вернули к исходным данным. Форма звонка отправляется своей кнопкой,
+  // поэтому в «сохранить карточку» она не входит.
+  const dirty = !sameValues(contactDraft, toContactDraft(data?.contact)) || !sameValues(currentLeadDraft, leadDraftFrom(data?.lead));
 
   function requestClose() {
-    if (dirty) setConfirmClose(true);
+    // Набранная тема звонка тоже пропадёт при закрытии, хотя кнопка сохранения её не касается.
+    if (dirty || callNote.trim() !== '') setConfirmClose(true);
     else onClose();
   }
 
@@ -134,7 +139,7 @@ export function ContactDrawer({ leadId, onClose }: ContactDrawerProps) {
     if (!leadId || !callDate) return;
     if (new Date(callDate).getTime() <= Date.now()) { setCallError('Выберите будущее время.'); return; }
     setActionError(''); setSuccessMessage(''); setBusyAction('call');
-    try { await scheduleCall(leadId, callDate, callNote); const nextDate = nextCallDate(); setCallDate(nextDate); setCallBaseline(nextDate); setCallNote(''); setCallError(''); setSuccessMessage('Звонок назначен.'); }
+    try { await scheduleCall(leadId, callDate, callNote); setCallDate(nextCallDate()); setCallNote(''); setCallError(''); setSuccessMessage('Звонок назначен.'); }
     catch { setActionError('Не удалось назначить звонок.'); }
     finally { setBusyAction(null); }
   }

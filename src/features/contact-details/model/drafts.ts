@@ -6,6 +6,11 @@ export type LeadDraft = Pick<Lead, 'result' | 'description' | 'assignee'> & { de
 export const EMPTY_DRAFT: ContactDraft = { organization: '', taxId: '', personName: '', position: '', phone: '', secondaryPhone: '', email: '', address: '', region: '', website: '', tags: [], customValues: {} };
 const EMPTY_LEAD_DRAFT: LeadDraft = { result: '', description: '', assignee: 'Я', deadline: '' };
 
+/** Черновики — плоские объекты с фиксированным порядком ключей, поэтому сравнения по JSON достаточно. */
+export function sameValues(left: object, right: object): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
 export function leadDraftFrom(lead: Lead | undefined): LeadDraft {
   if (!lead) return EMPTY_LEAD_DRAFT;
   return { result: lead.result, description: lead.description, assignee: lead.assignee, deadline: lead.deadline ?? '' };

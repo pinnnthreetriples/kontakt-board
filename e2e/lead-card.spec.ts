@@ -40,6 +40,8 @@ test('тег создаётся из карточки и остаётся у к�
   await page.getByRole('button', { name: '+ тег' }).press('Escape');
 
   await expect(card.getByText('Оптовик')).toBeVisible();
+  // Тег сохраняется сам, поэтому карточка не считается изменённой.
+  await expect(card.getByRole('button', { name: 'Сохранить изменения' })).toBeDisabled();
   await card.getByRole('button', { name: 'Закрыть', exact: true }).click();
   await page.getByRole('link', { name: 'Канбан' }).click();
   await expect(page.getByText('Оптовик')).toBeVisible();
@@ -109,4 +111,60 @@ test('крайний срок сохраняется и виден на канб
 
   await openApp(page, '/board');
   await expect(page.getByText('Срок: 31.08.2026')).toBeVisible();
+});
+
+test('после сохранения карточка закрывается без предупреждения', async ({ page }) => {
+  const card = await openFreshLeadCard(page, 'Клуб Сохранение', '+7 909 322-87-73');
+  // Пользователь поправил время звонка, но сам звонок не назначал.
+  await card.getByRole('group', { name: 'Дата и время' }).click();
+  await page.keyboard.press('ArrowUp');
+  await card.getByRole('textbox', { name: 'Комментарий' }).fill('Перезвонить после обеда');
+  await card.getByRole('button', { name: 'Сохранить изменения' }).click();
+  await expect(card.getByText('Изменения сохранены.')).toBeVisible();
+
+  await card.getByRole('button', { name: 'Закрыть', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'Закрыть без сохранения?' })).toHaveCount(0);
+});
+
+test('незаписанная тема звонка всё ещё предупреждает при закрытии', async ({ page }) => {
+  const card = await openFreshLeadCard(page, 'Клуб Звонок', '+7 909 322-87-74');
+  await card.getByRole('textbox', { name: 'Тема звонка' }).fill('Уточнить бюджет');
+
+  await card.getByRole('button', { name: 'Закрыть', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'Закрыть без сохранения?' })).toBeVisible();
+});
+
+test('кнопка сохранения гаснет при возврате к исходным значениям', async ({ page }) => {
+  const card = await openFreshLeadCard(page, 'Клуб Откат', '+7 909 322-87-75');
+  const save = card.getByRole('button', { name: 'Сохранить изменения' });
+  const comment = card.getByRole('textbox', { name: 'Комментарий' });
+  await expect(save).toBeDisabled();
+
+  await comment.fill('Черновик');
+  await expect(save).toBeEnabled();
+  await comment.fill('');
+  await expect(save).toBeDisabled();
+
+  await card.getByRole('button', { name: 'Закрыть', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'Закрыть без сохранения?' })).toHaveCount(0);
+});
+
+test('тег не откатывается сохранением карточки', async ({ page }) => {
+  const card = await openFreshLeadCard(page, 'Клуб Теги', '+7 909 322-87-76');
+  await card.getByRole('textbox', { name: 'Организация' }).fill('Клуб Теги и правки');
+
+  // Тег пишется в базу в обход черновика карточки, поэтому сохранение не должно его перетирать.
+  await card.getByRole('button', { name: 'Изменить теги' }).click();
+  await page.getByRole('button', { name: '+ тег' }).click();
+  await page.getByRole('textbox', { name: 'Название тега' }).fill('Оптовик');
+  await page.getByRole('button', { name: 'Создать' }).click();
+  await expect(page.getByRole('checkbox', { name: 'Оптовик' })).toBeChecked();
+  await page.getByRole('button', { name: '+ тег' }).press('Escape');
+
+  await card.getByRole('button', { name: 'Сохранить изменения' }).click();
+  await expect(card.getByText('Изменения сохранены.')).toBeVisible();
+  await card.getByRole('button', { name: 'Закрыть', exact: true }).click();
+
+  await openApp(page, '/board');
+  await expect(page.getByText('Оптовик')).toBeVisible();
 });
