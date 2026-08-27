@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  acknowledgeReview,
   BRIDGE_URL,
   describeBridgeError,
   BridgeUnreachableError,
@@ -71,12 +70,10 @@ describe('max-bridge', () => {
     const calls = stubFetch({ ok: true });
     await startAuth();
     await cancelAuth();
-    await acknowledgeReview();
     await logoutMax();
     expect(calls.map((call) => call.url)).toEqual([
       `${BRIDGE_URL}/auth/start`,
       `${BRIDGE_URL}/auth/cancel`,
-      `${BRIDGE_URL}/auth/review-ack`,
       `${BRIDGE_URL}/auth/logout`,
     ]);
     for (const call of calls) {
@@ -106,7 +103,7 @@ describe('max-bridge', () => {
   it('сообщает о недоступном мосте, если запрос не дошёл', async () => {
     vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new Error('Failed to fetch'))));
     await expect(fetchAuthState()).rejects.toThrow(BridgeUnreachableError);
-    await expect(fetchAuthState()).rejects.toThrow('START_BRIDGE.bat');
+    await expect(fetchAuthState()).rejects.toThrow('START_WINDOWS.cmd');
   });
 
   it('отличает не-JSON ответ от недоступного моста', async () => {

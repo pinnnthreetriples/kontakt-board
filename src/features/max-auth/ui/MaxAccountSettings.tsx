@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { QrCode2 } from '@mui/icons-material';
 import { Alert, Box, Button, CircularProgress, LinearProgress, Stack, TextField, Typography } from '@mui/material';
 import {
-  acknowledgeReview,
   describeBridgeError,
   cancelAuth,
   fetchAuthState,
@@ -148,11 +147,6 @@ export function MaxAccountSettings() {
           <Alert severity="success" sx={{ flex: 1 }}>Подключён аккаунт MAX: {snapshot?.account?.name ?? 'имя не передано'}</Alert>
           <Button color="error" variant="outlined" disabled={busy} onClick={() => void run(logoutMax)}>Выйти</Button>
         </Stack>
-      )}
-      {state === 'review_required' && (
-        <Alert severity="warning" action={<Button color="inherit" disabled={busy} onClick={() => void run(acknowledgeReview)}>Я проверил устройства</Button>}>
-          Предыдущий вход по QR-коду прервался уже после подтверждения. Откройте MAX, проверьте список активных устройств и удалите лишние, затем подтвердите проверку.
-        </Alert>
       )}
     </Stack>
   );

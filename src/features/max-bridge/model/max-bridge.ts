@@ -3,8 +3,9 @@ import { z } from 'zod';
 /**
  * Единственный сетевой модуль приложения. MAX недоступен из браузера напрямую
  * (двоичный протокол поверх websocket), поэтому все запросы идут в локальный
- * HTTP-мост из папки max-kp. Адрес фиксированный: если он когда-нибудь
- * изменится, это правка одной строки, а не новая настройка в интерфейсе.
+ * мост из папки `bridge`, который запускается вместе с приложением. Адрес
+ * фиксированный: если он изменится, это правка одной строки, а не новая
+ * настройка в интерфейсе.
  */
 export const BRIDGE_URL = 'http://127.0.0.1:8765';
 
@@ -15,7 +16,7 @@ const SEARCH_TIMEOUT_MS = 70_000;
 const SEND_TIMEOUT_MS = 100_000;
 
 /** Самое частое реальное состояние: мост просто не запущен. */
-const BRIDGE_OFFLINE_HINT = 'Мост MAX не отвечает. Запустите START_BRIDGE.bat в папке max-kp и повторите.';
+const BRIDGE_OFFLINE_HINT = 'Мост MAX не отвечает. Закройте приложение и запустите START_WINDOWS.cmd заново, окно моста должно остаться открытым.';
 
 export class BridgeUnreachableError extends Error {
   constructor() { super(BRIDGE_OFFLINE_HINT); }
@@ -41,7 +42,7 @@ const accountSchema = z.object({ name: z.string() });
 
 const authStateSchema = z.object({
   ok: z.literal(true),
-  state: z.enum(['idle', 'connecting', 'qr', 'password', 'connected', 'error', 'review_required', 'stopped']),
+  state: z.enum(['idle', 'connecting', 'qr', 'password', 'connected', 'error', 'stopped']),
   qrSvg: z.string().optional(),
   qrLink: z.string().optional(),
   error: z.string().optional(),
@@ -113,10 +114,6 @@ export async function cancelAuth(): Promise<void> {
 
 export async function submitAuthPassword(password: string): Promise<void> {
   await request('/auth/password', okSchema, { password });
-}
-
-export async function acknowledgeReview(): Promise<void> {
-  await request('/auth/review-ack', okSchema, {});
 }
 
 export async function logoutMax(): Promise<void> {

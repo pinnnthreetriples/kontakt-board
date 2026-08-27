@@ -138,6 +138,11 @@ rules:
   # never be satisfied from the project side. Not disabled, just not promoted.
 
 exclude:
+  # Мост на Python проверяется своими тестами (`npm run test:bridge`). Внутри
+  # него aislop переключает весь проект в режим python и ослабляет проверки
+  # TypeScript, а его правило hallucinated-import не умеет сопоставлять пакет
+  # maxapi-python с именем импорта pymax и считает библиотеку выдуманной.
+  - bridge
   - node_modules
   - .git
   - dist
