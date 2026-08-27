@@ -15,13 +15,16 @@ from dataclasses import dataclass, replace
 PHASE_IDLE = "idle"
 PHASE_CONNECTING = "connecting"
 PHASE_QR = "qr"
+PHASE_SMS_CODE = "sms_code"
 PHASE_PASSWORD = "password"
 PHASE_CONNECTED = "connected"
 PHASE_ERROR = "error"
 PHASE_STOPPED = "stopped"
 
 # Фазы, из которых рантайм может выйти сам: поток ещё жив или только что умер.
-_IN_PROGRESS_PHASES = frozenset({PHASE_CONNECTING, PHASE_QR, PHASE_PASSWORD, PHASE_CONNECTED})
+_IN_PROGRESS_PHASES = frozenset(
+    {PHASE_CONNECTING, PHASE_QR, PHASE_SMS_CODE, PHASE_PASSWORD, PHASE_CONNECTED}
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,6 +91,11 @@ class AuthState:
 
         if name == "qr":
             self._snapshot = replace(current, phase=PHASE_QR, qr_link=str(payload or ""), error="")
+            self._forget_qr_locked()
+            return
+
+        if name == "sms_code_required":
+            self._snapshot = replace(current, phase=PHASE_SMS_CODE, qr_link="", error="")
             self._forget_qr_locked()
             return
 

@@ -8,9 +8,12 @@ import {
   logoutMax,
   qrImageSource,
   startAuth,
+  startSmsAuth,
   submitAuthPassword,
+  submitSmsCode,
   type MaxAuthSnapshot,
 } from '../../max-bridge/model/max-bridge';
+import { SmsLoginPanel } from './SmsLoginPanel';
 import { tokens } from '../../../shared/design-system/tokens';
 
 const POLL_MS = 2_000;
@@ -20,18 +23,59 @@ const POLL_MS = 2_000;
  * ветвления и выводила основной компонент за лимит цикломатической сложности.
  */
 function QrPanel({ qrSvg, qrLink }: { qrSvg?: string; qrLink?: string }) {
+  // Ссылка показывается всегда, а не только когда картинка не отрисовалась:
+  // сканера может не оказаться под рукой, а открыть ссылку на телефоне можно
+  // всегда, и MAX перехватит её сам.
+  const link = qrLink !== undefined && qrLink !== '' ? (
+    <Stack gap={0.5}>
+      <Typography variant="body2" color="text.secondary">Нечем сканировать? Откройте на телефоне эту ссылку, никому её не пересылайте:</Typography>
+      <Typography variant="body2" sx={{ wordBreak: 'break-all' }}>{qrLink}</Typography>
+    </Stack>
+  ) : null;
+
   if (qrSvg !== undefined && qrSvg !== '') {
     return (
-      <Box
-        component="img"
-        src={qrImageSource(qrSvg)}
-        alt="QR-код для входа в MAX"
-        sx={{ width: tokens.size.qrCode, height: tokens.size.qrCode, p: 1, border: 1, borderColor: 'divider', borderRadius: tokens.radiusCss.md, bgcolor: 'common.white' }}
-      />
+      <Stack gap={1}>
+        <Box
+          component="img"
+          src={qrImageSource(qrSvg)}
+          alt="QR-код для входа в MAX"
+          sx={{ width: tokens.size.qrCode, height: tokens.size.qrCode, p: 1, border: 1, borderColor: 'divider', borderRadius: tokens.radiusCss.md, bgcolor: 'common.white' }}
+        />
+        {link}
+      </Stack>
     );
   }
-  const hint = qrLink !== undefined && qrLink !== '' ? qrLink : 'ссылка не получена, отмените вход и повторите';
-  return <Alert severity="warning">Мост не смог нарисовать QR-код. Откройте эту ссылку в MAX вручную: {hint}</Alert>;
+  if (link) return <Alert severity="warning">Мост не смог нарисовать QR-код, но вход по ссылке работает. {qrLink}</Alert>;
+  return <Alert severity="warning">Мост не смог получить код для входа. Отмените вход и повторите.</Alert>;
+}
+
+/** Состояния, в которых аккаунт не подключён и оператору предлагают войти. */
+function isDisconnected(state?: string): boolean {
+  return state === 'idle' || state === 'stopped' || state === 'error';
+}
+
+/**
+ * Вынесено из `MaxAccountSettings` целиком, вместе с разбором ошибки: два
+ * способа входа рядом выводили основной компонент за лимит сложности.
+ */
+function DisconnectedPanel({ error, busy, onQr, onSms, onCancel }: {
+  error?: string;
+  busy: boolean;
+  onQr: () => void;
+  onSms: (phone: string) => void;
+  onCancel: () => void;
+}) {
+  const label = error === undefined ? 'Войти в MAX' : 'Войти заново';
+  const action = <Button color="inherit" disabled={busy} startIcon={<QrCode2 />} onClick={onQr}>{label}</Button>;
+  return (
+    <Stack gap={2}>
+      {error === undefined
+        ? <Alert severity="info" action={action}>Аккаунт MAX не подключён, отправка КП недоступна.</Alert>
+        : <Alert severity="error" action={action}>{error}</Alert>}
+      <SmsLoginPanel stage="phone" busy={busy} onStart={onSms} onSubmitCode={() => undefined} onCancel={onCancel} />
+    </Stack>
+  );
 }
 
 export function MaxAccountSettings() {
@@ -74,7 +118,7 @@ export function MaxAccountSettings() {
   // Опрос идёт только пока вход не завершён. Состояние `password` тоже входит
   // сюда: без опроса оператор не увидит, что мост принял пароль. На
   // `connected` и `error` опрос прекращается сам.
-  const polling = state === 'connecting' || state === 'qr' || state === 'password';
+  const polling = state === 'connecting' || state === 'qr' || state === 'sms_code' || state === 'password';
 
   useEffect(() => {
     if (!polling) return;
@@ -101,15 +145,23 @@ export function MaxAccountSettings() {
       {busy && <LinearProgress aria-label="Выполняем запрос к MAX" />}
       {error && <Alert severity="error" action={<Button color="inherit" disabled={busy} onClick={() => void refresh()}>Повторить</Button>}>{error}</Alert>}
       {loading && <Box sx={{ py: 6, display: 'grid', placeItems: 'center' }}><CircularProgress aria-label="Проверяем подключение к MAX" /></Box>}
-      {(state === 'idle' || state === 'stopped') && (
-        <Alert severity="info" action={<Button color="inherit" disabled={busy} startIcon={<QrCode2 />} onClick={() => void run(startAuth)}>Войти в MAX</Button>}>
-          Аккаунт MAX не подключён, отправка КП недоступна.
-        </Alert>
+      {isDisconnected(state) && (
+        <DisconnectedPanel
+          error={state === 'error' ? snapshot?.error ?? 'MAX сообщил об ошибке входа.' : undefined}
+          busy={busy}
+          onQr={() => void run(startAuth)}
+          onSms={(phone) => void run(() => startSmsAuth(phone))}
+          onCancel={() => void run(cancelAuth)}
+        />
       )}
-      {state === 'error' && (
-        <Alert severity="error" action={<Button color="inherit" disabled={busy} onClick={() => void run(startAuth)}>Войти заново</Button>}>
-          {snapshot?.error ?? 'MAX сообщил об ошибке входа.'}
-        </Alert>
+      {state === 'sms_code' && (
+        <SmsLoginPanel
+          stage="code"
+          busy={busy}
+          onStart={() => undefined}
+          onSubmitCode={(code) => void run(() => submitSmsCode(code))}
+          onCancel={() => void run(cancelAuth)}
+        />
       )}
       {state === 'connecting' && (
         <Stack direction="row" alignItems="center" flexWrap="wrap" gap={2}>

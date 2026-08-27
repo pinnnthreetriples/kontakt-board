@@ -7,6 +7,7 @@ from __future__ import annotations
 нужно ровно обратное, поэтому здесь живёт подкласс её WebClient.
 """
 
+import asyncio
 import hashlib
 import logging
 import ssl
@@ -16,6 +17,8 @@ from typing import Any
 
 MAX_WS_URL = "wss://api.oneme.ru/websocket"
 MAX_ORIGIN = "https://web.max.ru"
+MAX_HOST = "api.oneme.ru"
+MAX_PORT = 443
 
 # api.oneme.ru отдаёт цепочку Let's Encrypt, которая завершается корнем
 # ISRG Root X2. Windows добирает корни своей программы по требованию только
@@ -100,34 +103,7 @@ def build_direct_web_client_class(web_client_base: type[Any]) -> type[Any]:
 
     class DirectWebClient(web_client_base):
         async def send_text_exact(self, chat_id: int, text: str) -> Any:
-            """Send the text exactly as entered, without PyMax Markdown rewriting."""
-            from pymax.api.messages.payloads import SendMessagePayload, SendMessagePayloadMessage
-            from pymax.api.response import require_payload_model
-            from pymax.protocol import Opcode
-            from pymax.types.domain import Message
-
-            cid = int(self._app.api.messages._next_cid())
-            frame = SendMessagePayload(
-                chat_id=chat_id,
-                message=SendMessagePayloadMessage(
-                    text=text,
-                    cid=cid,
-                    elements=[],
-                    attaches=[],
-                    link=None,
-                ),
-                notify=True,
-            )
-            response = await self._app.invoke(Opcode.MSG_SEND, frame.to_payload())
-            message = require_payload_model(response, Message)
-            # Treat an inconsistent ACK as unknown rather than marking delivery as
-            # definitely successful. The request may already have reached MAX, so
-            # callers must not retry automatically.
-            if message.chat_id is not None and int(message.chat_id) != int(chat_id):
-                raise RuntimeError("MAX вернул подтверждение для другого чата")
-            if message.cid is not None and int(message.cid) != cid:
-                raise RuntimeError("MAX вернул подтверждение с другим CID")
-            return message
+            return await send_text_exact(self._app, chat_id, text)
 
         def _build_connection(self) -> Any:
             transport = DirectWebSocketTransport(
@@ -143,6 +119,92 @@ def build_direct_web_client_class(web_client_base: type[Any]) -> type[Any]:
 
     DirectWebClient.__name__ = "DirectWebClient"
     return DirectWebClient
+
+
+def build_direct_client_class(client_base: type[Any]) -> type[Any]:
+    """Клиент MAX поверх TCP: он нужен для входа по SMS.
+
+    Вход по QR-коду умеет только web-клиент, а код из SMS MAX присылает лишь
+    тому, кто представился мобильным приложением. Поэтому у моста два клиента, и
+    оба ходят через один и тот же строгий TLS.
+    """
+
+    from pymax.connection import ConnectionManager
+    from pymax.connection.readers import TCPReader
+    from pymax.protocol.tcp import TcpProtocol
+    from pymax.protocol.tcp.framing import TcpPacketFramer
+    from pymax.transport.tcp import TCPTransport
+
+    class DirectTcpTransport(TCPTransport):
+        async def connect(self) -> None:
+            if (self._host, self._port) != (MAX_HOST, MAX_PORT):
+                raise RuntimeError("Неожиданный адрес MAX")
+            if self._proxy is not None:
+                raise RuntimeError("Прокси для MAX отключён политикой безопасности")
+
+            # Штатный транспорт передаёт ssl=True, то есть только системные
+            # корни. ISRG Root X2 среди них нет, и соединение падает на проверке
+            # цепочки там, где браузер работает.
+            self._reader, self._writer = await asyncio.open_connection(
+                MAX_HOST,
+                MAX_PORT,
+                ssl=build_tls_context(),
+                server_hostname=MAX_HOST,
+            )
+
+    class DirectClient(client_base):
+        async def send_text_exact(self, chat_id: int, text: str) -> Any:
+            return await send_text_exact(self._app, chat_id, text)
+
+        def _build_connection(self) -> Any:
+            transport = DirectTcpTransport(
+                host=self.extra_config.host,
+                port=self.extra_config.port,
+                proxy=None,
+            )
+            reader = TCPReader(transport=transport, framer=TcpPacketFramer())
+            return ConnectionManager(
+                reader=reader,
+                transport=transport,
+                protocol=TcpProtocol(),
+            )
+
+    DirectClient.__name__ = "DirectClient"
+    return DirectClient
+
+
+async def send_text_exact(app: Any, chat_id: int, text: str) -> Any:
+    """Отправить текст ровно как есть, без Markdown-разметки PyMax.
+
+    Штатный `send_message` прогоняет текст через форматтер, и звёздочки или
+    подчёркивания в КП превратились бы в разметку.
+    """
+    from pymax.api.messages.payloads import SendMessagePayload, SendMessagePayloadMessage
+    from pymax.api.response import require_payload_model
+    from pymax.protocol import Opcode
+    from pymax.types.domain import Message
+
+    cid = int(app.api.messages._next_cid())
+    frame = SendMessagePayload(
+        chat_id=chat_id,
+        message=SendMessagePayloadMessage(
+            text=text,
+            cid=cid,
+            elements=[],
+            attaches=[],
+            link=None,
+        ),
+        notify=True,
+    )
+    response = await app.invoke(Opcode.MSG_SEND, frame.to_payload())
+    message = require_payload_model(response, Message)
+    # Несовпадающее подтверждение трактуем как неизвестный исход, а не как
+    # успешную доставку: запрос мог дойти до MAX, и повторять его нельзя.
+    if message.chat_id is not None and int(message.chat_id) != int(chat_id):
+        raise RuntimeError("MAX вернул подтверждение для другого чата")
+    if message.cid is not None and int(message.cid) != cid:
+        raise RuntimeError("MAX вернул подтверждение с другим CID")
+    return message
 
 
 def silence_websocket_logging() -> None:

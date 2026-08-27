@@ -31,6 +31,13 @@ class FakeService:
         self.calls.append(("start", ()))
         self.state.mark_connecting()
 
+    def start_sms_connection(self, phone: str) -> None:
+        self.calls.append(("sms_start", (phone,)))
+        self.state.mark_connecting()
+
+    def submit_sms_code(self, code: str) -> None:
+        self.calls.append(("sms_code", (code,)))
+
     def cancel_connection(self) -> None:
         self.calls.append(("cancel", ()))
 
@@ -103,6 +110,27 @@ class HttpContractTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(body["state"], "connecting")
         self.assertEqual(self.service.calls, [("start", ())])
+
+    def test_sms_login_normalizes_phone(self) -> None:
+        status, body = self.call("/auth/sms/start", {"phone": "8 (909) 322-87-00"})
+        self.assertEqual(status, 200)
+        self.assertEqual(body["state"], "connecting")
+        self.assertEqual(self.service.calls, [("sms_start", ("+79093228700",))])
+
+    def test_sms_login_rejects_unknown_phone_format(self) -> None:
+        status, _ = self.call("/auth/sms/start", {"phone": "почта@example.com"})
+        self.assertEqual(status, 400)
+        self.assertEqual(self.service.calls, [])
+
+    def test_sms_code_keeps_only_digits(self) -> None:
+        # Код из SMS оператор копирует вместе с пробелами и дефисами.
+        self.call("/auth/sms/code", {"code": " 12-34 "})
+        self.assertEqual(self.service.calls, [("sms_code", ("1234",))])
+
+    def test_sms_code_without_digits_is_rejected(self) -> None:
+        status, _ = self.call("/auth/sms/code", {"code": "нет кода"})
+        self.assertEqual(status, 400)
+        self.assertEqual(self.service.calls, [])
 
     def test_password_is_passed_untouched(self) -> None:
         self.call("/auth/password", {"password": " пароль "})

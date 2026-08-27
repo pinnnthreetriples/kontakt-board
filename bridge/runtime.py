@@ -13,18 +13,26 @@ PyMax асинхронный, HTTP-сервер моста синхронный 
 
 import asyncio
 import logging
-import sqlite3
 import threading
-from contextlib import closing
 from pathlib import Path
 from typing import Any, Callable
 
-from auth_flow import Emit, LoginCancelledError, build_auth_flow
-from transport import MAX_WS_URL, build_direct_web_client_class, silence_websocket_logging
+from auth_flow import (
+    Emit,
+    LoginCancelledError,
+    build_qr_auth_flow,
+    build_sms_auth_flow,
+    is_expired_qr,
+)
+from session_store import MODE_QR, MODE_SMS, SESSION_FILE, SessionFiles
+from transport import (
+    MAX_WS_URL,
+    build_direct_client_class,
+    build_direct_web_client_class,
+    silence_websocket_logging,
+)
 
 LOG = logging.getLogger("kontakt_bridge")
-
-SESSION_FILE = "session.db"
 
 
 class MaxRuntime:
@@ -32,6 +40,7 @@ class MaxRuntime:
 
     def __init__(self, session_dir: Path, emit: Emit) -> None:
         self.session_dir = session_dir
+        self.session = SessionFiles(session_dir)
         self.emit = emit
         self.connected = False
         self.client: Any | None = None
@@ -43,32 +52,20 @@ class MaxRuntime:
         self._cancel_requested = threading.Event()
         self._cancel: asyncio.Event | None = None
         self._passwords: asyncio.Queue | None = None
+        self._codes: asyncio.Queue | None = None
+        self._mode = MODE_QR
+        self._phone = ""
         self._wipe_session = False
 
-    @property
-    def session_path(self) -> Path:
-        return self.session_dir / SESSION_FILE
 
-    def has_saved_session(self) -> bool:
-        """Есть ли сохранённый токен MAX.
-
-        Проверяется именно запись в файле: PyMax заводит пустое хранилище уже при
-        первой попытке входа, поэтому по наличию файла мост считал бы вход
-        выполненным и на каждом запуске молча просил новый QR-код.
-        """
-        if not self.session_path.is_file():
-            return False
-        try:
-            with closing(sqlite3.connect(self.session_path)) as connection:
-                return connection.execute("SELECT 1 FROM sessions LIMIT 1").fetchone() is not None
-        except sqlite3.Error as exc:
-            LOG.warning("Не удалось прочитать сессию MAX: %s", type(exc).__name__)
-            return False
-
-    def start_connection(self) -> None:
+    def start_connection(self, mode: str = MODE_QR, phone: str = "") -> None:
+        if mode == MODE_SMS and not phone:
+            raise RuntimeError("Для входа по SMS нужен номер телефона")
         with self._thread_lock:
             if self._thread and self._thread.is_alive():
                 raise RuntimeError("Предыдущее подключение MAX ещё завершается. Подождите пару секунд.")
+            self._mode = MODE_SMS if mode == MODE_SMS else MODE_QR
+            self._phone = phone
             self._cancel_requested.clear()
             self._thread = threading.Thread(target=self._thread_main, name="max-runtime", daemon=True)
             self._thread.start()
@@ -98,8 +95,14 @@ class MaxRuntime:
         return loop, cancel
 
     def submit_password(self, password: str) -> None:
-        loop, queue = self.loop, self._passwords
-        if loop is None or queue is None or not self._in_loop(loop, queue.put_nowait, password):
+        self._answer(self._passwords, password)
+
+    def submit_sms_code(self, code: str) -> None:
+        self._answer(self._codes, code)
+
+    def _answer(self, queue: asyncio.Queue | None, value: str) -> None:
+        loop = self.loop
+        if loop is None or queue is None or not self._in_loop(loop, queue.put_nowait, value):
             raise RuntimeError("Вход в MAX сейчас не выполняется")
 
     def logout(self) -> None:
@@ -183,14 +186,6 @@ class MaxRuntime:
             self.emit("logged_out", None)
         await self._close_client()
 
-    def _wipe_session_files(self) -> None:
-        for suffix in ("", "-wal", "-shm"):
-            candidate = self.session_path.with_name(self.session_path.name + suffix)
-            try:
-                candidate.unlink(missing_ok=True)
-            except OSError as exc:
-                LOG.error("Не удалось удалить файл сессии MAX: %s", type(exc).__name__)
-
     def _is_invalid_token(self, exc: BaseException) -> bool:
         """MAX отозвал сохранённый токен: локальную копию надо стереть.
 
@@ -218,18 +213,27 @@ class MaxRuntime:
             if self._is_invalid_token(exc):
                 self._wipe_session = True
                 self.emit("session_invalid", None)
+            elif is_expired_qr(exc):
+                self.emit(
+                    "connection_error",
+                    "QR-код истёк, его нужно отсканировать за пару минут. "
+                    "Нажмите «Войти в MAX» и попробуйте ещё раз.",
+                )
             else:
-                self.emit("connection_error", f"Ошибка MAX: {type(exc).__name__}")
+                # Текст ошибки идёт оператору целиком: одного имени класса не
+                # хватает даже чтобы понять, чинить сеть или аккаунт.
+                self.emit("connection_error", f"Ошибка MAX: {type(exc).__name__}: {str(exc)[:200]}")
         finally:
             self.connected = False
             self.emit("connected", False)
             if self._wipe_session:
                 self._wipe_session = False
-                self._wipe_session_files()
+                self.session.wipe()
             self.client = None
             self.loop = None
             self._cancel = None
             self._passwords = None
+            self._codes = None
             # Событие об остановке уходит до того, как слот потока освободится:
             # иначе новое подключение успело бы стартовать и получить это
             # событие как своё, оказавшись в фазе «остановлено».
@@ -238,8 +242,6 @@ class MaxRuntime:
                 self._thread = None
 
     def _run(self) -> None:
-        from pymax import ExtraConfig, WebClient
-
         silence_websocket_logging()
         self.session_dir.mkdir(parents=True, exist_ok=True)
         # Флаг привязан к одному прогону потока: подключение не должно унести
@@ -250,36 +252,22 @@ class MaxRuntime:
         asyncio.set_event_loop(loop)
         self.loop = loop
         cancel = asyncio.Event()
-        passwords: asyncio.Queue = asyncio.Queue()
         self._cancel = cancel
-        self._passwords = passwords
+        self._passwords = asyncio.Queue()
+        self._codes = asyncio.Queue()
 
-        client_class = build_direct_web_client_class(WebClient)
-        self.client = client_class(
-            work_dir=str(self.session_dir),
-            session_name=SESSION_FILE,
-            extra_config=ExtraConfig(
-                url=MAX_WS_URL,
-                telemetry=False,
-                log_level="CRITICAL",
-                proxy=None,
-                # Переподключение выключено: молчаливый повтор входа скрыл бы от
-                # оператора, что сессия больше не действует.
-                reconnect=False,
-                request_timeout=20.0,
-            ),
-            auth_flow=build_auth_flow(self.emit, cancel, self._cancel_requested, passwords),
-        )
+        self.client = self._build_client(cancel)
 
         @self.client.on_start()
         async def _on_start(_client: Any) -> None:
             if self._cancel_requested.is_set():
-                # Отмена пришла в момент подтверждения QR: серверная сессия уже
-                # создана, поэтому её нужно закрыть, а не просто забыть. О своём
-                # исходе `_logout_coro` сообщает сам, и он же закрывает клиента,
-                # обрывая эту задачу: после него код здесь уже не выполняется.
+                # Отмена пришла в момент подтверждения входа: серверная сессия
+                # уже создана, поэтому её нужно закрыть, а не просто забыть. О
+                # своём исходе `_logout_coro` сообщает сам, и он же закрывает
+                # клиента, обрывая эту задачу: дальше код здесь не выполняется.
                 await self._logout_coro()
                 return
+            self.session.remember(self._mode, self._phone)
             self.connected = True
             self.emit("connected", True)
 
@@ -292,6 +280,34 @@ class MaxRuntime:
             loop.run_until_complete(self._serve_client())
         finally:
             _drain_loop(loop)
+
+    def _build_client(self, cancel: asyncio.Event) -> Any:
+        """Клиент под выбранный способ входа. Оба ходят через один строгий TLS."""
+        from pymax import Client, ExtraConfig, WebClient
+
+        common = {
+            "telemetry": False,
+            "log_level": "CRITICAL",
+            "proxy": None,
+            # Переподключение выключено: молчаливый повтор входа скрыл бы от
+            # оператора, что сессия больше не действует.
+            "reconnect": False,
+            "request_timeout": 20.0,
+        }
+        if self._mode == MODE_SMS:
+            return build_direct_client_class(Client)(
+                phone=self._phone,
+                work_dir=str(self.session_dir),
+                session_name=SESSION_FILE,
+                extra_config=ExtraConfig(**common),
+                auth_flow=build_sms_auth_flow(self.emit, cancel, self._codes, self._passwords),
+            )
+        return build_direct_web_client_class(WebClient)(
+            work_dir=str(self.session_dir),
+            session_name=SESSION_FILE,
+            extra_config=ExtraConfig(url=MAX_WS_URL, **common),
+            auth_flow=build_qr_auth_flow(self.emit, cancel, self._cancel_requested, self._passwords),
+        )
 
     async def _serve_client(self) -> None:
         """Один прогон PyMax без его собственного цикла переподключения."""

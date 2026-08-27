@@ -1,8 +1,8 @@
-import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
 
+from auth_flow import is_expired_qr
 from runtime import MaxRuntime
 
 
@@ -27,38 +27,21 @@ class FakeClient:
     _app = FakeApp()
 
 
-class SavedSessionTests(unittest.TestCase):
+class ExpiredQrTests(unittest.TestCase):
+    def test_expired_qr_is_recognised(self) -> None:
+        self.assertTrue(is_expired_qr(RuntimeError("QR authentication expired")))
+
+    def test_other_runtime_errors_are_not_expired_qr(self) -> None:
+        self.assertFalse(is_expired_qr(RuntimeError("Клиент MAX не создан")))
+        self.assertFalse(is_expired_qr(ConnectionError("обрыв")))
+
+
+class RuntimeTests(unittest.TestCase):
     def setUp(self) -> None:
         self._dir = tempfile.TemporaryDirectory()
         self.addCleanup(self._dir.cleanup)
         self.events: list[tuple[str, object]] = []
         self.runtime = MaxRuntime(Path(self._dir.name), lambda name, payload: self.events.append((name, payload)))
-
-    def _make_store(self, with_token: bool) -> None:
-        self.runtime.session_dir.mkdir(parents=True, exist_ok=True)
-        connection = sqlite3.connect(self.runtime.session_path)
-        connection.execute("CREATE TABLE sessions (token TEXT NOT NULL PRIMARY KEY, device_id TEXT NOT NULL)")
-        if with_token:
-            connection.execute("INSERT INTO sessions VALUES ('token', 'device')")
-        connection.commit()
-        connection.close()
-
-    def test_missing_file_means_no_session(self) -> None:
-        self.assertFalse(self.runtime.has_saved_session())
-
-    def test_empty_store_means_no_session(self) -> None:
-        # PyMax создаёт файл уже при неудачной попытке входа.
-        self._make_store(with_token=False)
-        self.assertFalse(self.runtime.has_saved_session())
-
-    def test_stored_token_means_session(self) -> None:
-        self._make_store(with_token=True)
-        self.assertTrue(self.runtime.has_saved_session())
-
-    def test_broken_store_is_treated_as_no_session(self) -> None:
-        self.runtime.session_dir.mkdir(parents=True, exist_ok=True)
-        self.runtime.session_path.write_bytes(b"not a database")
-        self.assertFalse(self.runtime.has_saved_session())
 
     def test_revoked_token_is_recognised_by_pymax(self) -> None:
         # Текст ошибки PyMax выглядит как «... [FAIL_LOGIN_TOKEN]», и разбирать
@@ -77,10 +60,16 @@ class SavedSessionTests(unittest.TestCase):
         # Ошибка может прийти до того, как клиент создан: тогда остаётся текст.
         self.assertTrue(self.runtime._is_invalid_token(FakeApiError("FAIL_LOGIN_TOKEN")))
 
-    def test_wipe_removes_session_files(self) -> None:
-        self._make_store(with_token=True)
-        self.runtime._wipe_session_files()
-        self.assertFalse(self.runtime.session_path.exists())
+    def test_sms_login_requires_a_phone(self) -> None:
+        # Без номера MAX некуда слать код, и поток запускать незачем.
+        with self.assertRaises(RuntimeError):
+            self.runtime.start_connection("sms", "")
+
+    def test_answers_are_refused_when_login_is_not_running(self) -> None:
+        for answer in (self.runtime.submit_sms_code, self.runtime.submit_password):
+            with self.subTest(answer=answer.__name__):
+                with self.assertRaises(RuntimeError):
+                    answer("1234")
 
 
 if __name__ == "__main__":

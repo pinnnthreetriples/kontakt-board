@@ -17,6 +17,7 @@ from typing import Any, Coroutine
 from history import SendLedger
 from phones import mask_phone
 from runtime import MaxRuntime
+from session_store import MODE_QR, MODE_SMS
 from sending import ResultStatus, SendResult, find_recipient, recipient_name, send_proposal
 from state import AuthState
 
@@ -68,18 +69,33 @@ class BridgeService:
         return " ".join(name.split())[:160]
 
     def resume_saved_session(self) -> bool:
-        """Подключиться сразу, если сессия уже сохранена с прошлого раза."""
-        if not self.runtime.has_saved_session():
+        """Подключиться сразу, если сессия уже сохранена с прошлого раза.
+
+        Клиент выбирается тот же, каким сессию открыли: web-токен от QR-входа
+        мобильный клиент не примет, и наоборот.
+        """
+        if not self.runtime.session.has_token():
             return False
-        self.start_connection()
+        mode, phone = self.runtime.session.saved_login()
+        self.start_connection(mode, phone)
         return True
 
-    def start_connection(self) -> None:
+    def start_connection(self, mode: str = MODE_QR, phone: str = "") -> None:
         try:
-            self.runtime.start_connection()
+            self.runtime.start_connection(mode, phone)
         except RuntimeError as exc:
             raise BridgeError(409, str(exc)) from exc
         self.state.mark_connecting()
+
+    def start_sms_connection(self, phone: str) -> None:
+        """Вход по номеру телефона: MAX пришлёт код в SMS."""
+        self.start_connection(MODE_SMS, phone)
+
+    def submit_sms_code(self, code: str) -> None:
+        try:
+            self.runtime.submit_sms_code(code)
+        except RuntimeError as exc:
+            raise BridgeError(409, str(exc)) from exc
 
     def cancel_connection(self) -> None:
         self.runtime.cancel_connection()

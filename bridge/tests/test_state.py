@@ -7,6 +7,7 @@ from state import (
     PHASE_IDLE,
     PHASE_PASSWORD,
     PHASE_QR,
+    PHASE_SMS_CODE,
     PHASE_STOPPED,
     AuthState,
 )
@@ -30,6 +31,19 @@ class AuthStateTests(unittest.TestCase):
         self.state.apply_event("connected", True)
         self.assertEqual(self.state.snapshot().phase, PHASE_CONNECTED)
         self.assertEqual(self.state.snapshot().qr_link, "")
+
+    def test_sms_login_path(self) -> None:
+        self.state.mark_connecting()
+        self.state.apply_event("sms_code_required", "")
+        self.assertEqual(self.state.snapshot().phase, PHASE_SMS_CODE)
+        self.state.apply_event("connected", True)
+        self.assertEqual(self.state.snapshot().phase, PHASE_CONNECTED)
+
+    def test_waiting_for_sms_code_is_an_unfinished_login(self) -> None:
+        # Из этой фазы рантайм может выйти сам, и об остановке надо сообщить.
+        self.state.apply_event("sms_code_required", "")
+        self.state.apply_event("runtime_stopped", None)
+        self.assertEqual(self.state.snapshot().phase, PHASE_STOPPED)
 
     def test_error_survives_later_shutdown_events(self) -> None:
         self.state.mark_connecting()

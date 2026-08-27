@@ -10,6 +10,8 @@ import {
   searchRecipient,
   sendProposal,
   startAuth,
+  startSmsAuth,
+  submitSmsCode,
   submitAuthPassword,
 } from './max-bridge';
 
@@ -81,6 +83,20 @@ describe('max-bridge', () => {
       expect(call.init.body).toBe('{}');
       expect(call.init.headers).toEqual({ 'Content-Type': 'application/json' });
     }
+  });
+
+  it('отправляет номер и код для входа по SMS', async () => {
+    const calls = stubFetch({ ok: true });
+    await startSmsAuth('8 909 322-87-00');
+    await submitSmsCode('12 34');
+    expect(calls.map((call) => call.url)).toEqual([
+      `${BRIDGE_URL}/auth/sms/start`,
+      `${BRIDGE_URL}/auth/sms/code`,
+    ]);
+    // Приведением номера и кода занимается мост: у него одна нормализация на
+    // все входы, и повторять её в браузере значило бы разойтись с ней.
+    expect(calls[0]?.init.body).toBe(JSON.stringify({ phone: '8 909 322-87-00' }));
+    expect(calls[1]?.init.body).toBe(JSON.stringify({ code: '12 34' }));
   });
 
   it('передаёт пароль двухфакторной проверки', async () => {

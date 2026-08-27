@@ -42,7 +42,7 @@ const accountSchema = z.object({ name: z.string() });
 
 const authStateSchema = z.object({
   ok: z.literal(true),
-  state: z.enum(['idle', 'connecting', 'qr', 'password', 'connected', 'error', 'stopped']),
+  state: z.enum(['idle', 'connecting', 'qr', 'sms_code', 'password', 'connected', 'error', 'stopped']),
   qrSvg: z.string().optional(),
   qrLink: z.string().optional(),
   error: z.string().optional(),
@@ -106,6 +106,18 @@ export async function fetchAuthState(): Promise<MaxAuthSnapshot> {
 
 export async function startAuth(): Promise<void> {
   await request('/auth/start', okSchema, {});
+}
+
+/**
+ * Запасной вход, когда отсканировать QR нечем. Номер уходит мостом в MAX как
+ * есть: он же приводит его к формату E.164 и он же отвечает за отказ.
+ */
+export async function startSmsAuth(phone: string): Promise<void> {
+  await request('/auth/sms/start', okSchema, { phone });
+}
+
+export async function submitSmsCode(code: string): Promise<void> {
+  await request('/auth/sms/code', okSchema, { code });
 }
 
 export async function cancelAuth(): Promise<void> {

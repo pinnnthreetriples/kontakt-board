@@ -198,6 +198,8 @@ class BridgeHandler(BaseHTTPRequestHandler):
         self._dispatch(
             {
                 "/auth/start": self._auth_start,
+                "/auth/sms/start": self._auth_sms_start,
+                "/auth/sms/code": self._auth_sms_code,
                 "/auth/cancel": self._auth_cancel,
                 "/auth/password": self._auth_password,
                 "/auth/logout": self._auth_logout,
@@ -258,6 +260,23 @@ class BridgeHandler(BaseHTTPRequestHandler):
         self._read_json_body()
         self._service.start_connection()
         self._send_json(200, {"ok": True, "state": "connecting"}, origin)
+
+    def _auth_sms_start(self, origin: str) -> None:
+        body = self._read_json_body()
+        phone = self._normalized_phone(self._text_field(body, "phone"))
+        self._service.start_sms_connection(phone)
+        LOG.info("Вход по SMS для %s", mask_phone(phone))
+        self._send_json(200, {"ok": True, "state": "connecting"}, origin)
+
+    def _auth_sms_code(self, origin: str) -> None:
+        body = self._read_json_body()
+        if "code" not in body:
+            raise BridgeError(400, "Не передано поле «code»")
+        code = "".join(char for char in self._text_field(body, "code") if char.isdigit())
+        if not code:
+            raise BridgeError(400, "Код из SMS состоит из цифр")
+        self._service.submit_sms_code(code)
+        self._send_json(200, {"ok": True}, origin)
 
     def _auth_cancel(self, origin: str) -> None:
         self._read_json_body()
