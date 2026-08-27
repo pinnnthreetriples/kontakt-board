@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { ContentCopyOutlined, ExpandMore, PhoneOutlined } from '@mui/icons-material';
+import { ContentCopyOutlined, ExpandMore, PhoneOutlined, SendOutlined } from '@mui/icons-material';
 import { Box, Button, Collapse, IconButton, InputAdornment, Stack, Switch, TextField, Tooltip, Typography } from '@mui/material';
 import { tokens } from '../../../shared/design-system/tokens';
 import { formatShortDate } from '../../../shared/lib/dates';
@@ -17,6 +17,7 @@ interface ContactFieldsProps {
   onLeadDraftChange: (draft: LeadDraft) => void;
   onCopyPhone: () => void;
   recordings: ReactNode;
+  onSendProposal: () => void;
 }
 
 interface CustomFieldsEditorProps {
@@ -40,7 +41,7 @@ function CustomFieldsEditor({ fields, draft, onChange }: CustomFieldsEditorProps
   </>;
 }
 
-export function ContactFields({ draft, leadDraft, createdAt, customFields, onDraftChange, onLeadDraftChange, onCopyPhone, recordings }: ContactFieldsProps) {
+export function ContactFields({ draft, leadDraft, createdAt, customFields, onDraftChange, onLeadDraftChange, onCopyPhone, recordings, onSendProposal }: ContactFieldsProps) {
   const [open, setOpen] = useState(false);
   const clock = useClock();
   const localTime = describeRegionTime(draft.region, clock);
@@ -60,6 +61,7 @@ export function ContactFields({ draft, leadDraft, createdAt, customFields, onDra
           <InputAdornment position="end">
             <Tooltip title="Скопировать номер"><Box component="span"><IconButton size="small" aria-label="Скопировать номер" disabled={!telHref} onClick={onCopyPhone}><ContentCopyOutlined fontSize="small" /></IconButton></Box></Tooltip>
             <Tooltip title="Позвонить"><Box component="span"><IconButton size="small" aria-label="Позвонить" color="primary" disabled={!telHref} href={telHref}><PhoneOutlined fontSize="small" /></IconButton></Box></Tooltip>
+            <Tooltip title={telHref ? 'Отправить КП в MAX' : 'Укажите телефон, чтобы отправить КП'}><Box component="span"><IconButton size="small" aria-label="Отправить КП в MAX" color="primary" disabled={!telHref} onClick={onSendProposal}><SendOutlined fontSize="small" /></IconButton></Box></Tooltip>
           </InputAdornment>
         ) } }} />
       </Stack>

@@ -24,7 +24,9 @@ import { db } from '../../../infrastructure/database/database';
 import { tokens } from '../../../shared/design-system/tokens';
 import { formatDateTime, formatDateTimeValue, formatDateValue, parseDateValue, toDateInputValue } from '../../../shared/lib/dates';
 import { addComment, deleteLead, moveLead, saveLeadCard, scheduleCall, setLeadPriority } from '../../../entities/lead/model/lead-service';
+import type { Contact } from '../../../shared/model/domain';
 import { EMPTY_DRAFT, leadDraftFrom, type ContactDraft, type LeadDraft } from '../model/drafts';
+import { SendProposalDialog } from '../../send-proposal/ui/SendProposalDialog';
 import { Toast } from '../../../shared/ui/Toast';
 import { ContactFields } from './ContactFields';
 import { EditableTitle } from './EditableTitle';
@@ -63,6 +65,26 @@ async function loadContactDetails(leadId: string | null) {
   return { lead, contact, chat, calls, stages, customFields, author: preferences?.ownerName.trim() || 'Я' };
 }
 
+// Черновик контакта собирается вне компонента: ветка с запасным значением иначе
+// поднимает его цикломатическую сложность выше лимита линтера.
+function toContactDraft(contact: Contact | undefined): ContactDraft {
+  if (!contact) return EMPTY_DRAFT;
+  return {
+    organization: contact.organization,
+    taxId: contact.taxId,
+    personName: contact.personName,
+    position: contact.position,
+    phone: contact.phone,
+    secondaryPhone: contact.secondaryPhone,
+    email: contact.email,
+    address: contact.address,
+    region: contact.region,
+    website: contact.website,
+    tags: contact.tags,
+    customValues: contact.customValues,
+  };
+}
+
 // Имя диалога вынесено из компонента: подстановка запасного текста иначе поднимает
 // его цикломатическую сложность выше лимита линтера.
 function cardLabel(organization: string): string {
@@ -80,22 +102,10 @@ export function ContactDrawer({ leadId, onClose }: ContactDrawerProps) {
   const [busyAction, setBusyAction] = useState<'save' | 'call' | 'stage' | 'delete' | null>(null);
   const [confirmClose, setConfirmClose] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [proposalOpen, setProposalOpen] = useState(false);
   const [draft, setDraft] = useState<ContactDraft | null>(null);
   const [leadDraft, setLeadDraft] = useState<LeadDraft | null>(null);
-  const contactDraft = draft ?? (data?.contact ? {
-    organization: data.contact.organization,
-    taxId: data.contact.taxId,
-    personName: data.contact.personName,
-    position: data.contact.position,
-    phone: data.contact.phone,
-    secondaryPhone: data.contact.secondaryPhone,
-    email: data.contact.email,
-    address: data.contact.address,
-    region: data.contact.region,
-    website: data.contact.website,
-    tags: data.contact.tags,
-    customValues: data.contact.customValues,
-  } : EMPTY_DRAFT);
+  const contactDraft = draft ?? toContactDraft(data?.contact);
   const currentLeadDraft = leadDraft ?? leadDraftFrom(data?.lead);
   const dirty = draft !== null || leadDraft !== null || Boolean(callNote.trim()) || callDate !== callBaseline;
 
@@ -216,6 +226,7 @@ export function ContactDrawer({ leadId, onClose }: ContactDrawerProps) {
                 onDraftChange={setDraft}
                 onLeadDraftChange={setLeadDraft}
                 onCopyPhone={copyPhone}
+                onSendProposal={() => setProposalOpen(true)}
                 recordings={<LeadRecordings leadId={data.lead.id} />}
               />
             </Stack>
@@ -228,6 +239,7 @@ export function ContactDrawer({ leadId, onClose }: ContactDrawerProps) {
           </Stack>
         </Stack>
       </DialogContent>
+      {proposalOpen && <SendProposalDialog leadId={data.lead.id} phone={contactDraft.phone} onClose={() => setProposalOpen(false)} />}
       <Dialog open={confirmClose} onClose={() => setConfirmClose(false)} aria-labelledby="confirm-close-title"><DialogTitle id="confirm-close-title">Закрыть без сохранения?</DialogTitle><DialogContent><Typography>Несохранённые изменения будут потеряны.</Typography></DialogContent><DialogActions><Button onClick={() => setConfirmClose(false)}>Продолжить редактирование</Button><Button color="error" onClick={onClose}>Закрыть</Button></DialogActions></Dialog>
       <Dialog open={confirmDelete} onClose={() => { if (busyAction !== 'delete') setConfirmDelete(false); }} aria-labelledby="confirm-delete-title"><DialogTitle id="confirm-delete-title">Удалить заявку?</DialogTitle><DialogContent><Typography>Заявка «{data.contact.organization || data.contact.personName || 'Без названия'}», её комментарии, история и звонки будут удалены навсегда. Отменить это нельзя.</Typography></DialogContent><DialogActions><Button disabled={busyAction === 'delete'} onClick={() => setConfirmDelete(false)}>Отмена</Button><Button color="error" variant="contained" loading={busyAction === 'delete'} onClick={() => void removeLead()}>Удалить</Button></DialogActions></Dialog>
     </Dialog>

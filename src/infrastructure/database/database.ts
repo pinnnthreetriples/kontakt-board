@@ -35,12 +35,11 @@ const SCHEMA_WITH_RECORDINGS = { ...SCHEMA_WITH_PRIORITY, recordings: 'id, leadI
 async function repairStageInvariants(transaction: Transaction): Promise<void> {
   const stagesTable = transaction.table<Stage, string>('stages');
   const leadsTable = transaction.table<Lead, string>('leads');
-  let stages = await stagesTable.toArray();
+  const stages = await stagesTable.toArray();
   let active = stages.filter((stage) => !stage.archived);
   if (active.length === 0) {
     const recovery: Stage = { id: 'stage-recovered', name: 'Новые', color: stageColors[0], order: 0, archived: false, kind: 'normal' };
     await stagesTable.put(recovery);
-    stages = [...stages, recovery];
     active = [recovery];
   }
   active.sort((left, right) => left.order - right.order || left.id.localeCompare(right.id));

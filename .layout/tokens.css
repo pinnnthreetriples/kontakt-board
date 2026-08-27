@@ -124,6 +124,7 @@
   --size-chat-bubble-max: 78%;
   --size-card-pane: calc(100vh - 340px);
   --size-card-pane-min: 420px;
+  --size-qr-code: 220px;
   --size-zero: 0;
   --size-full: 100%;
   --size-viewport: 100vh;

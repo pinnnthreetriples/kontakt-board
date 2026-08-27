@@ -62,7 +62,7 @@ export interface ContactComment {
 export interface ActivityItem {
   id: string;
   leadId: string;
-  kind: 'created' | 'updated' | 'stage_changed' | 'commented' | 'call_scheduled' | 'call_completed' | 'imported';
+  kind: 'created' | 'updated' | 'stage_changed' | 'commented' | 'call_scheduled' | 'call_completed' | 'imported' | 'proposal_sent';
   text: string;
   author: string;
   createdAt: string;
