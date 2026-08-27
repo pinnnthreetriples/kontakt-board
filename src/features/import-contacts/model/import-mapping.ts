@@ -1,6 +1,7 @@
 import type { ImportColumnMapping } from '../../../shared/model/domain';
 
 // Пустой список алиасов = поле не подставляется само, только вручную в мастере импорта.
+// Цвет тегам заводится при импорте, поэтому автоподстановка «Теги» безопасна.
 const HEADER_ALIASES: Record<keyof ImportColumnMapping, string[]> = {
   organization: ['организация', 'компания', 'название организации'],
   taxId: ['инн'],
@@ -12,7 +13,7 @@ const HEADER_ALIASES: Record<keyof ImportColumnMapping, string[]> = {
   address: ['адрес'],
   region: ['регион'],
   website: ['сайт'],
-  tags: [],
+  tags: ['теги', 'тег'],
   externalId: ['id записи', 'id', 'ид записи'],
   result: ['результат', 'статус'],
   description: ['комментарий', 'описание', 'описание сферы деятельности'],
@@ -38,6 +39,12 @@ export function suggestMapping(headers: string[]): ImportColumnMapping {
     if (mapping[field]) continue;
     const header = pick((key) => aliases.some((alias) => key.startsWith(alias)));
     if (header) { mapping[field] = header; claimed.add(header); }
+  }
+  // Второй телефонный столбец уходит в дополнительный телефон, но только когда основной
+  // уже нашёлся: если в файле телефон один, он обязан остаться основным.
+  if (mapping.phone && !mapping.secondaryPhone) {
+    const header = pick((key) => key.startsWith('телефон'));
+    if (header) { mapping.secondaryPhone = header; claimed.add(header); }
   }
   return mapping;
 }

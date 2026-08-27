@@ -9,6 +9,8 @@ type ToastProps = {
   message: ReactNode;
   onClose: () => void;
   action?: ReactNode;
+  /** Тост с кнопкой действия живёт дольше: три секунды на осознанный клик мало. */
+  autoHideDuration?: number;
 };
 
 // Поверхность тоста нейтральная, как и положено снекбару: тип сообщения передаёт
@@ -28,12 +30,12 @@ const SEVERITY_ICONS: Record<AlertColor, ReactNode> = {
  */
 const TOAST_MS = 3_000;
 
-export function Toast({ open, severity, message, onClose, action }: ToastProps) {
+export function Toast({ open, severity, message, onClose, action, autoHideDuration = TOAST_MS }: ToastProps) {
   return (
     <Snackbar
       open={open}
       anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-      autoHideDuration={TOAST_MS}
+      autoHideDuration={autoHideDuration}
       onClose={(_, reason) => { if (reason !== 'clickaway') onClose(); }}
       slotProps={{ content: { role: 'alert' } }}
       message={<Stack direction="row" alignItems="center" gap={1}>{SEVERITY_ICONS[severity]}{message}</Stack>}
