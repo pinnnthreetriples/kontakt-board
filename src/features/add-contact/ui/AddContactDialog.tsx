@@ -81,7 +81,7 @@ export function AddContactDialog({ open, onClose, onCreated }: AddContactDialogP
       <DialogActions>
         <Button onClick={close} disabled={busy}>Отмена</Button>
         <Button variant="contained" startIcon={busy ? <CircularProgress size={16} /> : <PersonAddAlt1Outlined />} disabled={!filled || !currentStageId || busy} onClick={() => void submit()}>
-          {busy ? 'Сохранение…' : 'Добавить'}
+          Добавить
         </Button>
       </DialogActions>
     </Dialog>

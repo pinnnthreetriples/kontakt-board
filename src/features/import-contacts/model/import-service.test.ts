@@ -281,3 +281,29 @@ describe('импорт контактов', () => {
     expect(await db.leads.count()).toBe(1);
   });
 });
+
+describe('теги партии', () => {
+  it('проставляются всем заявкам файла и получают цвет в справочнике', async () => {
+    const second = { ...row, Телефон: '+7 909 322-87-05', 'ID записи': '21300000002' };
+    const preview = await buildPreview([row, second], mapping);
+
+    await commitImport('calls.xlsx', preview, mapping, DEFAULT_STAGES[0]!.id, undefined, ['Акрато 25.08', ' Акрато 25.08 ', '']);
+
+    const contacts = await db.contacts.toArray();
+    expect(contacts).toHaveLength(2);
+    expect(contacts.every((contact) => contact.tags.includes('Акрато 25.08'))).toBe(true);
+    const tags = await db.tags.toArray();
+    expect(tags).toHaveLength(1);
+    expect(tags[0]?.color).toBeTruthy();
+  });
+
+  it('добавляются и при повторном импорте того же контакта', async () => {
+    await commitImport('first.xlsx', await buildPreview([row], mapping), mapping, DEFAULT_STAGES[0]!.id);
+
+    await commitImport('second.xlsx', await buildPreview([row], mapping), mapping, DEFAULT_STAGES[0]!.id, undefined, ['Повтор']);
+
+    const contact = await db.contacts.toCollection().first();
+    expect(contact?.tags).toContain('Повтор');
+    expect(await db.contacts.count()).toBe(1);
+  });
+});

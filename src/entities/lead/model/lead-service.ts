@@ -6,7 +6,7 @@ import type { ActivityItem, Contact, Lead, LeadPriority, LeadView } from '../../
 export const PRIORITY_LABELS: Record<LeadPriority, string> = { low: 'Низкий', normal: 'Средний', high: 'Высокий' };
 
 type ContactCardValues = Pick<Contact, 'organization' | 'taxId' | 'personName' | 'position' | 'phone' | 'secondaryPhone' | 'email' | 'address' | 'region' | 'website' | 'tags' | 'customValues'>;
-type LeadCardValues = Pick<Lead, 'result' | 'description' | 'assignee'>;
+type LeadCardValues = Pick<Lead, 'result' | 'description' | 'assignee' | 'deadline'>;
 
 const EMPTY_CONTACT: ContactCardValues = {
   organization: '', taxId: '', personName: '', position: '', phone: '', secondaryPhone: '',
@@ -149,19 +149,21 @@ export async function saveLeadCard(leadId: string, contactValues: ContactCardVal
     if (!contact) throw new LeadNotFoundError();
     const normalizedPhone = await checkedPhone(contact.id, contactValues.phone);
     await db.contacts.update(contact.id, { ...contactChanges(contactValues), normalizedPhone, updatedAt: now });
-    await db.leads.update(lead.id, { ...leadValues, updatedAt: now });
+    // Пустая строка из поля даты означает «срок не задан», в базе такого ключа быть не должно.
+    await db.leads.update(lead.id, { ...leadValues, deadline: leadValues.deadline?.trim() || undefined, updatedAt: now });
     await db.activities.add({ id: createId(), leadId, kind: 'updated', text: 'Карточка изменена', author, createdAt: now });
   });
 }
 
 // Контакт удаляется вместе с последней своей заявкой, иначе остаётся сиротой.
 export async function deleteLead(leadId: string): Promise<void> {
-  await db.transaction('rw', [db.leads, db.contacts, db.comments, db.activities, db.calls], async () => {
+  await db.transaction('rw', [db.leads, db.contacts, db.comments, db.activities, db.calls, db.recordings], async () => {
     const lead = await db.leads.get(leadId);
     if (!lead) throw new LeadNotFoundError();
     await db.comments.where('leadId').equals(leadId).delete();
     await db.activities.where('leadId').equals(leadId).delete();
     await db.calls.where('leadId').equals(leadId).delete();
+    await db.recordings.where('leadId').equals(leadId).delete();
     await db.leads.delete(leadId);
     const remaining = await db.leads.where('contactId').equals(lead.contactId).count();
     if (remaining === 0) await db.contacts.delete(lead.contactId);

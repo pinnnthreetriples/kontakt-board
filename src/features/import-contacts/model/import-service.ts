@@ -4,6 +4,7 @@ import { isValid, parse, parseISO } from 'date-fns';
 import { db } from '../../../infrastructure/database/database';
 import { createId } from '../../../shared/lib/ids';
 import { normalizePhone } from '../../../shared/lib/phone';
+import { ensureTagColors } from '../../../entities/tag/model/tag-service';
 import type {
   ActivityItem,
   Contact,
@@ -191,6 +192,7 @@ type ImportState = {
   leadsByKey: Map<string, Lead>;
   leadsByContactSource: Map<string, Lead>;
   commentKeys: Set<string>;
+  tagNames: Set<string>;
   lastActivityAt: number;
 };
 
@@ -218,6 +220,7 @@ async function loadImportState(): Promise<ImportState> {
     })),
     leadsByContactSource,
     commentKeys: new Set(comments.map((comment) => `${comment.leadId}::${comment.text}`)),
+    tagNames: new Set<string>(),
     lastActivityAt: 0,
   };
 }
@@ -250,12 +253,19 @@ function makeLead(
   };
 }
 
+// Теги партии добавляются и новым, и обновляемым контактам: это метка выгрузки, а не поле строки.
+function applyBatchTags(contact: Contact, extraTags: string[], seen: Set<string>): void {
+  if (extraTags.length > 0) contact.tags = [...new Set([...contact.tags, ...extraTags])];
+  for (const tag of contact.tags) seen.add(tag);
+}
+
 async function processPreview(
   preview: ImportPreviewRow,
   mapping: ImportColumnMapping,
   defaultStageId: string,
   state: ImportState,
   summary: ImportSummary,
+  extraTags: string[],
 ): Promise<void> {
   if (preview.action === 'error') { summary.errors += 1; return; }
   if (preview.action === 'skip') { summary.skipped += 1; return; }
@@ -273,6 +283,7 @@ async function processPreview(
   const existingLead = linkedLead(state, key, leadByKey, existingContact, source);
   const incoming = makeContact(preview.raw, mapping, existingContact?.id ?? createId(), now);
   const contact = existingContact ? updateContact(existingContact, incoming, now) : incoming;
+  applyBatchTags(contact, extraTags, state.tagNames);
   await db.contacts.put(contact);
   state.contactsById.set(contact.id, contact);
   const previousPhone = existingContact?.normalizedPhone;
@@ -300,16 +311,18 @@ async function processPreview(
 }
 
 export async function commitImport(fileName: string, previews: ImportPreviewRow[], mapping: ImportColumnMapping,
-  defaultStageId: string, onProgress?: (completed: number, total: number) => void): Promise<ImportSummary> {
+  defaultStageId: string, onProgress?: (completed: number, total: number) => void, batchTags: string[] = []): Promise<ImportSummary> {
   const summary: ImportSummary = { created: 0, updated: 0, skipped: 0, errors: 0 };
-  await db.transaction('rw', [db.contacts, db.leads, db.stages, db.comments, db.activities, db.importJobs], async () => {
+  const extraTags = [...new Set(batchTags.map((tag) => tag.trim()).filter(Boolean))];
+  await db.transaction('rw', [db.contacts, db.leads, db.stages, db.comments, db.activities, db.importJobs, db.tags], async () => {
     const stage = await db.stages.get(defaultStageId);
     if (!stage || stage.archived) throw new Error('Активный этап для импорта не найден');
     const state = await loadImportState();
     for (const [index, preview] of previews.entries()) {
-      await processPreview(preview, mapping, defaultStageId, state, summary);
+      await processPreview(preview, mapping, defaultStageId, state, summary, extraTags);
       if ((index + 1) % 25 === 0 || index === previews.length - 1) onProgress?.(index + 1, previews.length);
     }
+    await ensureTagColors([...state.tagNames]);
     await db.importJobs.add({ id: createId(), fileName, ...summary, createdAt: new Date().toISOString() });
   });
   return summary;

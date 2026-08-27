@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { EditOutlined } from '@mui/icons-material';
 import { Box, Button, Checkbox, Chip, IconButton, ListItemButton, Popover, Stack, TextField, Typography } from '@mui/material';
-import { tokens } from '../../../shared/design-system/tokens';
-import { createTag, setContactTags } from '../../../entities/tag/model/tag-service';
-import { useTagColors } from '../../../entities/tag/model/useTagColors';
+import { stageColors, tokens } from '../../../shared/design-system/tokens';
+import { createTag, nextTagColor, setContactTags } from '../../../entities/tag/model/tag-service';
+import { tagChipSx, useTagColors } from '../../../entities/tag/model/useTagColors';
 
 interface TagBarProps {
   contactId: string;
@@ -15,12 +15,14 @@ function TagDot({ color, className }: { color: string; className?: string }) {
   return <Box className={className} sx={{ bgcolor: color, borderRadius: tokens.radiusCss.round, width: tokens.size.tagDot, height: tokens.size.tagDot, flexShrink: 0 }} />;
 }
 
+
 export function TagBar({ contactId, tags, disabled = false }: TagBarProps) {
   const colors = useTagColors();
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const [busy, setBusy] = useState(false);
   const [creating, setCreating] = useState(false);
   const [draft, setDraft] = useState('');
+  const [draftColor, setDraftColor] = useState<string>(stageColors[0]);
   const [error, setError] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -50,7 +52,7 @@ export function TagBar({ contactId, tags, disabled = false }: TagBarProps) {
     setBusy(true);
     setError('');
     try {
-      const tag = await createTag(draft);
+      const tag = await createTag(draft, draftColor);
       await setContactTags(contactId, [...tags, tag.name]);
       setCreating(false);
       setDraft('');
@@ -75,9 +77,9 @@ export function TagBar({ contactId, tags, disabled = false }: TagBarProps) {
           label={tag}
           size="small"
           variant="outlined"
-          icon={<TagDot color={colors.get(tag) ?? 'text.secondary'} />}
           disabled={locked}
           onDelete={() => { void apply(tags.filter((name) => name !== tag)); }}
+          sx={tagChipSx(colors.get(tag))}
         />
       ))}
       <IconButton size="small" aria-label="Изменить теги" disabled={locked} onClick={(event) => setAnchor(event.currentTarget)} sx={{ '&:focus-visible': { outline: tokens.focus.outline, outlineColor: 'primary.light' } }}>
@@ -100,6 +102,13 @@ export function TagBar({ contactId, tags, disabled = false }: TagBarProps) {
           {creating ? (
             <Stack gap={1} sx={{ px: 1.5, py: 1 }}>
               <TextField inputRef={inputRef} size="small" label="Название тега" value={draft} disabled={busy} onChange={(event) => setDraft(event.target.value)} onKeyDown={onDraftKeyDown} />
+              <Stack direction="row" gap={0.5}>
+                {stageColors.map((color, index) => (
+                  <IconButton key={color} size="small" disabled={busy} aria-label={`Цвет ${index + 1}`} aria-pressed={draftColor === color} onClick={() => setDraftColor(color)} sx={{ border: 1, borderColor: draftColor === color ? 'text.primary' : 'transparent' }}>
+                    <TagDot color={color} />
+                  </IconButton>
+                ))}
+              </Stack>
               {error !== '' && <Typography color="error" variant="body2">{error}</Typography>}
               <Stack direction="row" gap={1}>
                 <Button size="small" variant="contained" disabled={busy} onClick={() => void submitDraft()}>Создать</Button>
@@ -107,7 +116,7 @@ export function TagBar({ contactId, tags, disabled = false }: TagBarProps) {
               </Stack>
             </Stack>
           ) : (
-            <ListItemButton dense disabled={busy} onClick={() => { setError(''); setCreating(true); }}>
+            <ListItemButton dense disabled={busy} onClick={() => { setError(''); setDraftColor(nextTagColor(colors.size)); setCreating(true); }}>
               <Typography variant="body2">+ тег</Typography>
             </ListItemButton>
           )}

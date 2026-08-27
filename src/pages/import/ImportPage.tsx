@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from 'react';
 import { ArrowBack, CheckCircleOutline, CloudUploadOutlined, DescriptionOutlined, WarningAmberOutlined } from '@mui/icons-material';
 import {
   Alert,
+  Autocomplete,
   Box,
   Button,
   Chip,
@@ -20,6 +21,7 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  TextField,
   Typography,
 } from '@mui/material';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -28,6 +30,7 @@ import { buildPreview, commitImport, MAX_IMPORT_ROWS, parseWorkbook } from '../.
 import { db } from '../../infrastructure/database/database';
 import type { ImportColumnMapping, ImportPreviewRow, ParsedSheet } from '../../shared/model/domain';
 import { exportBackup } from '../../features/backup/model/backup-service';
+import { RecordingsUpload } from '../../features/import-recordings/ui/RecordingsUpload';
 import { tokens } from '../../shared/design-system/tokens';
 
 const FILE_LIMIT = 15 * 1024 * 1024;
@@ -53,6 +56,9 @@ export function ImportPage() {
   const [error, setError] = useState('');
   const [result, setResult] = useState<{ created: number; updated: number; skipped: number; errors: number } | null>(null);
   const [importProgress, setImportProgress] = useState(0);
+  const [recordingsOnly, setRecordingsOnly] = useState(false);
+  const [batchTags, setBatchTags] = useState<string[]>([]);
+  const tagNames = useLiveQuery(() => db.tags.orderBy('name').toArray(), [])?.map((tag) => tag.name) ?? [];
   const selectedSheet = sheets[sheetIndex];
   const counts = useMemo(() => ({
     create: preview.filter((row) => row.action === 'create').length,
@@ -99,14 +105,14 @@ export function ImportPage() {
     try {
       if ((await db.contacts.count()) > 0) await exportBackup();
       setImportProgress(0);
-      setResult(await commitImport(file.name, preview, mapping, firstStage.id, (completed, total) => setImportProgress(Math.round((completed / total) * 100)))); setStep(3);
+      setResult(await commitImport(file.name, preview, mapping, firstStage.id, (completed, total) => setImportProgress(Math.round((completed / total) * 100)), batchTags)); setStep(3);
     }
     catch { setError('Импорт отменён: данные не были записаны. Проверьте файл и повторите.'); }
     finally { setBusy(false); }
   }
 
   function reset() {
-    setFile(null); setSheets([]); setPreview([]); setMapping({}); setResult(null); setImportProgress(0); setStep(0); setError('');
+    setFile(null); setSheets([]); setPreview([]); setMapping({}); setResult(null); setImportProgress(0); setStep(0); setError(''); setRecordingsOnly(false); setBatchTags([]);
     if (fileInput.current) fileInput.current.value = '';
   }
 
@@ -121,9 +127,15 @@ export function ImportPage() {
     <Box sx={{ p: { xs: 2, sm: 3 }, maxWidth: tokens.size.contentWide }}>
       <Stepper alternativeLabel activeStep={step} sx={{ mb: 3.5, '& .MuiStepLabel-label': { display: { xs: 'none', sm: 'block' } } }}><Step><StepLabel>Файл</StepLabel></Step><Step><StepLabel>Столбцы</StepLabel></Step><Step><StepLabel>Проверка</StepLabel></Step><Step><StepLabel>Готово</StepLabel></Step></Stepper>
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-      {step === 0 && (
+      {step === 0 && recordingsOnly && (
+        <Stack gap={2}>
+          <RecordingsUpload />
+          <Button startIcon={<ArrowBack />} onClick={() => setRecordingsOnly(false)} sx={{ alignSelf: 'flex-start' }}>Вернуться к импорту Excel</Button>
+        </Stack>
+      )}
+      {step === 0 && !recordingsOnly && (
         <Paper sx={{ p: { xs: 3, sm: 8 }, border: '1px dashed', borderColor: 'primary.main', bgcolor: 'primary.light', textAlign: 'center', borderRadius: tokens.radiusCss.lg }}>
-          {busy ? <CircularProgress aria-label="Чтение Excel-файла" /> : <><CloudUploadOutlined color="primary" sx={{ fontSize: tokens.size.uploadIcon }} /><Typography variant="h2" mt={1.5}>Выберите Excel-файл</Typography><Typography color="text.secondary" mt={1}>XLSX, до 15 МБ</Typography><Button component="label" variant="contained" sx={{ mt: 2.5 }}>Выбрать файл<Box component="input" ref={fileInput} hidden type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => { const selected = event.target.files?.[0]; if (selected) void selectFile(selected); }} /></Button></>}
+          {busy ? <CircularProgress aria-label="Чтение Excel-файла" /> : <><CloudUploadOutlined color="primary" sx={{ fontSize: tokens.size.uploadIcon }} /><Typography variant="h2" mt={1.5}>Выберите Excel-файл</Typography><Typography color="text.secondary" mt={1}>XLSX, до 15 МБ</Typography><Button component="label" variant="contained" sx={{ mt: 2.5 }}>Выбрать файл<Box component="input" ref={fileInput} hidden type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => { const selected = event.target.files?.[0]; if (selected) void selectFile(selected); }} /></Button><Typography variant="body2" color="text.secondary" mt={2.5}>Записи разговоров уже присылали отдельно?</Typography><Button onClick={() => setRecordingsOnly(true)}>Загрузить только записи разговоров</Button></>}
         </Paper>
       )}
       {step === 1 && selectedSheet && (
@@ -133,7 +145,14 @@ export function ImportPage() {
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 1.5 }}>
             {fields.map(({ key, label }) => <Stack key={key} direction={{ xs: 'column', sm: 'row' }} alignItems={{ xs: 'stretch', sm: 'center' }} gap={2}><Typography variant="body2" sx={{ width: { xs: tokens.size.full, sm: tokens.size.importLabel } }}>{label}{key === 'phone' || key === 'externalId' ? ' *' : ''}</Typography><Select inputProps={{ 'aria-label': `Столбец для поля «${label}»` }} fullWidth size="small" displayEmpty value={mapping[key] ?? ''} onChange={(event) => setMapping({ ...mapping, [key]: event.target.value || undefined })}><MenuItem value=""><Box component="em">Не импортировать</Box></MenuItem>{selectedSheet.headers.map((header) => <MenuItem value={header} key={header}>{header}</MenuItem>)}</Select></Stack>)}
           </Box>
-          <Stack direction="row" justifyContent="space-between" flexWrap="wrap" gap={1} mt={3}><Button startIcon={<ArrowBack />} onClick={reset}>Назад</Button><Button variant="contained" onClick={() => void preparePreview()} disabled={busy}>{busy ? 'Проверяю...' : 'Проверить данные'}</Button></Stack>
+          {/* Тег партии проставляется всем заявкам файла: это метка выгрузки, а не столбец строки. */}
+          <Autocomplete
+            multiple freeSolo size="small" options={tagNames} value={batchTags}
+            onChange={(_, value) => setBatchTags([...new Set(value.map((tag) => tag.trim()).filter(Boolean))])}
+            renderInput={(params) => <TextField {...params} label="Теги для всех заявок файла" placeholder="Например, Акрато 25.08" helperText="Выберите готовый тег или впишите новый и нажмите Enter, цвет назначится автоматически" />}
+            sx={{ mt: 2.5 }}
+          />
+          <Stack direction="row" justifyContent="space-between" flexWrap="wrap" gap={1} mt={3}><Button startIcon={<ArrowBack />} onClick={reset}>Назад</Button><Button variant="contained" loading={busy} onClick={() => void preparePreview()}>Проверить данные</Button></Stack>
         </Paper>
       )}
       {step === 2 && (
@@ -142,12 +161,16 @@ export function ImportPage() {
           <Stack direction="row" gap={1} my={2}><Chip color="success" label={`Новые: ${counts.create}`} /><Chip color="primary" label={`Обновятся: ${counts.update}`} /><Chip label={`Пропущены: ${counts.skip}`} /><Chip color="error" label={`Ошибки: ${counts.error}`} /></Stack>
           <TableContainer><Table size="small"><TableHead><TableRow><TableCell>Строка</TableCell><TableCell>Организация</TableCell><TableCell>Контакт</TableCell><TableCell>Телефон</TableCell><TableCell>Действие</TableCell></TableRow></TableHead><TableBody>{preview.slice(0, 20).map((row) => <TableRow key={row.rowNumber}><TableCell>{row.rowNumber}</TableCell><TableCell>{row.organization || '—'}</TableCell><TableCell>{row.personName || '—'}</TableCell><TableCell>{row.phone || '—'}</TableCell><TableCell><Chip size="small" color={row.action === 'error' ? 'error' : row.action === 'create' ? 'success' : row.action === 'update' ? 'primary' : 'default'} label={row.error ?? ({ create: 'Создать', update: 'Обновить', skip: 'Пропустить', error: 'Ошибка' })[row.action]} /></TableCell></TableRow>)}</TableBody></Table></TableContainer>
           {preview.length > 20 && <Typography variant="body2" color="text.secondary" mt={1.5}>Показаны первые 20 строк из {preview.length}</Typography>}
-          <Stack direction="row" justifyContent="space-between" flexWrap="wrap" gap={1} mt={3}><Button startIcon={<ArrowBack />} onClick={() => setStep(1)}>Изменить столбцы</Button><Stack direction="row" flexWrap="wrap" gap={1}>{counts.error > 0 && <Button color="error" onClick={downloadErrors}>Скачать ошибки</Button>}<Button variant="contained" onClick={() => void runImport()} disabled={busy}>{busy ? `Импортирую ${importProgress}%` : `Импортировать ${counts.create + counts.update}`}</Button></Stack></Stack>
+          <Stack direction="row" justifyContent="space-between" flexWrap="wrap" gap={1} mt={3}><Button startIcon={<ArrowBack />} onClick={() => setStep(1)}>Изменить столбцы</Button><Stack direction="row" flexWrap="wrap" gap={1}>{counts.error > 0 && <Button color="error" onClick={downloadErrors}>Скачать ошибки</Button>}<Button variant="contained" loading={busy} onClick={() => void runImport()}>{`Импортировать ${counts.create + counts.update}`}</Button></Stack></Stack>
           {busy && <LinearProgress aria-label="Прогресс импорта" variant="determinate" value={importProgress} sx={{ mt: 2 }} />}
         </Paper>
       )}
       {step === 3 && result && (
-        <Paper sx={{ p: 7, textAlign: 'center', border: 1, borderColor: 'divider', borderRadius: tokens.radiusCss.lg }}><CheckCircleOutline color="success" sx={{ fontSize: tokens.size.successIcon }} /><Typography variant="h1" mt={1.5}>Импорт завершён</Typography><Typography color="text.secondary" mt={1}>Создано: {result.created}, обновлено: {result.updated}, пропущено: {result.skipped}, ошибок: {result.errors}</Typography><Button variant="contained" onClick={reset} sx={{ mt: 3 }}>Импортировать ещё файл</Button></Paper>
+        <Stack gap={2}>
+          <Paper sx={{ p: 7, textAlign: 'center', border: 1, borderColor: 'divider', borderRadius: tokens.radiusCss.lg }}><CheckCircleOutline color="success" sx={{ fontSize: tokens.size.successIcon }} /><Typography variant="h1" mt={1.5}>Импорт завершён</Typography><Typography color="text.secondary" mt={1}>Создано: {result.created}, обновлено: {result.updated}, пропущено: {result.skipped}, ошибок: {result.errors}</Typography><Typography color="text.secondary" mt={1}>Записи разговоров из кол-центра прикрепляются ниже</Typography><Button variant="contained" onClick={reset} sx={{ mt: 3 }}>Импортировать ещё файл</Button></Paper>
+          {/* Записи приходят тем же письмом, что и Excel, поэтому шаг стоит сразу после импорта. */}
+          <RecordingsUpload />
+        </Stack>
       )}
     </Box>
   );

@@ -127,6 +127,17 @@ describe('lead-service', () => {
     expect(await db.activities.where('leadId').equals(lead.id).count()).toBe(1);
   });
 
+  it('сохраняет крайний срок и снимает его пустым значением', async () => {
+    const lead = (await db.leads.toArray())[0]!;
+    const contact = (await db.contacts.get(lead.contactId))!;
+
+    await saveLeadCard(lead.id, cardValues(contact), { ...leadValues(lead), deadline: '2026-09-01' });
+    expect(await db.leads.get(lead.id)).toMatchObject({ deadline: '2026-09-01' });
+
+    await saveLeadCard(lead.id, cardValues(contact), { ...leadValues(lead), deadline: '  ' });
+    expect((await db.leads.get(lead.id))?.deadline).toBeUndefined();
+  });
+
   it('откатывает сохранение карточки при коллизии телефона', async () => {
     const first = (await db.leads.toArray())[0]!;
     const firstContact = (await db.contacts.get(first.contactId))!;

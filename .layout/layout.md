@@ -140,7 +140,7 @@ than writing a number into `sx`.
 | `var(--size-nav-compact-width)` | `72px` | `tokens.size.navCompactWidth` |
 | `var(--size-topbar-height)` | `72px` | `tokens.size.topbarHeight` |
 | `var(--size-control-height)` | `40px` | `tokens.size.controlHeight` |
-| `var(--size-card-min-width)` | `288px` | `tokens.size.cardMinWidth` |
+| `var(--size-card-min-width)` | `320px` | `tokens.size.cardMinWidth` |
 | `var(--size-drawer-width)` | `560px` | `tokens.size.drawerWidth` |
 | `var(--size-drawer-max-width)` | `92vw` | `tokens.size.drawerMaxWidth` |
 | `var(--size-content-narrow)` | `980px` | `tokens.size.contentNarrow` |
@@ -157,6 +157,7 @@ than writing a number into `sx`.
 | `var(--size-select-wide)` | `190px` | `tokens.size.selectWide` |
 | `var(--size-call-label)` | `120px` | `tokens.size.callLabel` |
 | `var(--size-call-input)` | `220px` | `tokens.size.callInput` |
+| `var(--size-field-min)` | `170px` | `tokens.size.fieldMin` |
 | `var(--size-import-label)` | `170px` | `tokens.size.importLabel` |
 | `var(--size-title-slot)` | `180px` | `tokens.size.titleSlot` |
 | `var(--size-logo)` | `34px` | `tokens.size.logo` |
@@ -181,8 +182,9 @@ than writing a number into `sx`.
 | `var(--size-pipeline-ring)` | `28px` | `tokens.size.pipelineRing` |
 | `var(--size-pipeline-line)` | `2px` | `tokens.size.pipelineLine` |
 | `var(--size-app-loader)` | `300px` | `tokens.size.appLoader` |
-| `var(--size-chat-viewport)` | `420px` | `tokens.size.chatViewport` |
 | `var(--size-chat-bubble-max)` | `78%` | `tokens.size.chatBubbleMax` |
+| `var(--size-card-pane)` | `calc(100vh - 340px)` | `tokens.size.cardPane` |
+| `var(--size-card-pane-min)` | `420px` | `tokens.size.cardPaneMin` |
 | `var(--size-zero)` | `0` | `tokens.size.zero` |
 | `var(--size-full)` | `100%` | `tokens.size.full` |
 | `var(--size-viewport)` | `100vh` | `tokens.size.viewport` |
