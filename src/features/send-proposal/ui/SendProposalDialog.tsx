@@ -39,11 +39,20 @@ function LookupNotice({ lookup, searching }: { lookup: Lookup; searching: boolea
   return null;
 }
 
-function SendOutcomeNotice({ result, onRetry }: { result: MaxSendResult; onRetry: () => void }) {
+function SendOutcomeNotice({ result, onRetry, onUnlock }: { result: MaxSendResult; onRetry: () => void; onUnlock: () => void }) {
   if (result.delivered) return <Alert severity="success">Отправлено в MAX, получатель {result.recipient}. {result.detail}</Alert>;
-  // Для неизвестного статуса кнопки повтора нет намеренно: сообщение могло уже
-  // уйти, и повторная отправка создала бы дубль у получателя.
-  if (result.uncertain) return <Alert severity="warning">Статус доставки неизвестен ({result.status}). Сообщение могло уже уйти, повторная отправка вручную создаст дубль. Проверьте переписку в MAX. {result.detail}</Alert>;
+  // Вместо кнопки повтора здесь снятие блокировки: сообщение могло уже уйти, и
+  // отправить его снова можно только после того, как оператор увидел переписку.
+  if (result.uncertain) {
+    return (
+      <Alert severity="warning" action={<Button color="inherit" onClick={onUnlock}>Я проверил переписку</Button>}>
+        Статус доставки неизвестен. Сообщение могло уже уйти, повторная отправка создаст дубль. Откройте переписку в MAX: если КП не пришло, снимите блокировку и отправьте заново. {result.detail}
+      </Alert>
+    );
+  }
+  // Мост уже отправлял этот текст этому получателю и заблокировал дубль. Это не
+  // сбой, поэтому и кнопки повтора здесь нет: она бы возвращала то же самое.
+  if (result.status === 'SKIPPED_DUPLICATE') return <Alert severity="info">Это КП уже отправлялось. {result.detail}</Alert>;
   return <Alert severity="info" action={<Button color="inherit" onClick={onRetry}>Отправить снова</Button>}>Сообщение не отправлено ({result.status}). {result.detail}</Alert>;
 }
 
@@ -86,6 +95,16 @@ export function SendProposalDialog({ leadId, phone, onClose }: SendProposalDialo
     return () => { clearTimeout(timer); };
   }, [phone, search]);
 
+  /**
+   * Правка текста или номера убирает прошлый результат, но не блокировку после
+   * неизвестного статуса: журнал моста ловит повтор по точному тексту, и лишний
+   * пробел в сообщении обошёл бы эту защиту. Снять блокировку можно только
+   * кнопкой, то есть осознанно.
+   */
+  function forgetOutcome(): void {
+    setOutcome((previous) => (previous?.uncertain === true ? previous : null));
+  }
+
   const message = text.trim();
   const canSend = message !== '' && phoneValue.trim() !== '' && busy === null && lookup.kind !== 'missing' && !(outcome?.uncertain ?? false);
 
@@ -117,7 +136,7 @@ export function SendProposalDialog({ leadId, phone, onClose }: SendProposalDialo
             fullWidth
             label="Телефон получателя"
             value={phoneValue}
-            onChange={(event) => { setPhoneValue(event.target.value); setOutcome(null); }}
+            onChange={(event) => { setPhoneValue(event.target.value); forgetOutcome(); }}
             helperText={editing ? 'К формату MAX номер приводит мост, вводите как удобно.' : 'Номер из карточки. Нажмите карандаш, чтобы указать другой.'}
             slotProps={{ input: {
               readOnly: !editing,
@@ -137,10 +156,10 @@ export function SendProposalDialog({ leadId, phone, onClose }: SendProposalDialo
             minRows={4}
             label="Сообщение"
             value={text}
-            onChange={(event) => { setText(event.target.value); setOutcome(null); }}
+            onChange={(event) => { setText(event.target.value); forgetOutcome(); }}
           />
           {message === '' && <Alert severity="info">Напишите текст сообщения, без него отправка недоступна.</Alert>}
-          {outcome && <SendOutcomeNotice result={outcome} onRetry={() => void submit()} />}
+          {outcome && <SendOutcomeNotice result={outcome} onRetry={() => void submit()} onUnlock={() => setOutcome(null)} />}
         </Stack>
       </DialogContent>
       <DialogActions>

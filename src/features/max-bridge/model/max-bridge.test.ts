@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  acknowledgeReview,
   BRIDGE_URL,
   describeBridgeError,
   BridgeUnreachableError,
@@ -11,6 +10,8 @@ import {
   searchRecipient,
   sendProposal,
   startAuth,
+  startSmsAuth,
+  submitSmsCode,
   submitAuthPassword,
 } from './max-bridge';
 
@@ -71,12 +72,10 @@ describe('max-bridge', () => {
     const calls = stubFetch({ ok: true });
     await startAuth();
     await cancelAuth();
-    await acknowledgeReview();
     await logoutMax();
     expect(calls.map((call) => call.url)).toEqual([
       `${BRIDGE_URL}/auth/start`,
       `${BRIDGE_URL}/auth/cancel`,
-      `${BRIDGE_URL}/auth/review-ack`,
       `${BRIDGE_URL}/auth/logout`,
     ]);
     for (const call of calls) {
@@ -84,6 +83,20 @@ describe('max-bridge', () => {
       expect(call.init.body).toBe('{}');
       expect(call.init.headers).toEqual({ 'Content-Type': 'application/json' });
     }
+  });
+
+  it('отправляет номер и код для входа по SMS', async () => {
+    const calls = stubFetch({ ok: true });
+    await startSmsAuth('8 909 322-87-00');
+    await submitSmsCode('12 34');
+    expect(calls.map((call) => call.url)).toEqual([
+      `${BRIDGE_URL}/auth/sms/start`,
+      `${BRIDGE_URL}/auth/sms/code`,
+    ]);
+    // Приведением номера и кода занимается мост: у него одна нормализация на
+    // все входы, и повторять её в браузере значило бы разойтись с ней.
+    expect(calls[0]?.init.body).toBe(JSON.stringify({ phone: '8 909 322-87-00' }));
+    expect(calls[1]?.init.body).toBe(JSON.stringify({ code: '12 34' }));
   });
 
   it('передаёт пароль двухфакторной проверки', async () => {
@@ -106,7 +119,7 @@ describe('max-bridge', () => {
   it('сообщает о недоступном мосте, если запрос не дошёл', async () => {
     vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new Error('Failed to fetch'))));
     await expect(fetchAuthState()).rejects.toThrow(BridgeUnreachableError);
-    await expect(fetchAuthState()).rejects.toThrow('START_BRIDGE.bat');
+    await expect(fetchAuthState()).rejects.toThrow('START_WINDOWS.cmd');
   });
 
   it('отличает не-JSON ответ от недоступного моста', async () => {

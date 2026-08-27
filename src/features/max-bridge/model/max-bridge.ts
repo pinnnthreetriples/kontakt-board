@@ -3,8 +3,9 @@ import { z } from 'zod';
 /**
  * Единственный сетевой модуль приложения. MAX недоступен из браузера напрямую
  * (двоичный протокол поверх websocket), поэтому все запросы идут в локальный
- * HTTP-мост из папки max-kp. Адрес фиксированный: если он когда-нибудь
- * изменится, это правка одной строки, а не новая настройка в интерфейсе.
+ * мост из папки `bridge`, который запускается вместе с приложением. Адрес
+ * фиксированный: если он изменится, это правка одной строки, а не новая
+ * настройка в интерфейсе.
  */
 export const BRIDGE_URL = 'http://127.0.0.1:8765';
 
@@ -15,7 +16,7 @@ const SEARCH_TIMEOUT_MS = 70_000;
 const SEND_TIMEOUT_MS = 100_000;
 
 /** Самое частое реальное состояние: мост просто не запущен. */
-const BRIDGE_OFFLINE_HINT = 'Мост MAX не отвечает. Запустите START_BRIDGE.bat в папке max-kp и повторите.';
+const BRIDGE_OFFLINE_HINT = 'Мост MAX не отвечает. При первом запуске он несколько минут ставит свои библиотеки, дождитесь строки «Мост слушает» в его окне. Если окна нет, закройте приложение и запустите START_WINDOWS.cmd заново.';
 
 export class BridgeUnreachableError extends Error {
   constructor() { super(BRIDGE_OFFLINE_HINT); }
@@ -41,7 +42,7 @@ const accountSchema = z.object({ name: z.string() });
 
 const authStateSchema = z.object({
   ok: z.literal(true),
-  state: z.enum(['idle', 'connecting', 'qr', 'password', 'connected', 'error', 'review_required', 'stopped']),
+  state: z.enum(['idle', 'connecting', 'qr', 'sms_code', 'password', 'connected', 'error', 'stopped']),
   qrSvg: z.string().optional(),
   qrLink: z.string().optional(),
   error: z.string().optional(),
@@ -107,16 +108,24 @@ export async function startAuth(): Promise<void> {
   await request('/auth/start', okSchema, {});
 }
 
+/**
+ * Запасной вход, когда отсканировать QR нечем. Номер уходит мостом в MAX как
+ * есть: он же приводит его к формату E.164 и он же отвечает за отказ.
+ */
+export async function startSmsAuth(phone: string): Promise<void> {
+  await request('/auth/sms/start', okSchema, { phone });
+}
+
+export async function submitSmsCode(code: string): Promise<void> {
+  await request('/auth/sms/code', okSchema, { code });
+}
+
 export async function cancelAuth(): Promise<void> {
   await request('/auth/cancel', okSchema, {});
 }
 
 export async function submitAuthPassword(password: string): Promise<void> {
   await request('/auth/password', okSchema, { password });
-}
-
-export async function acknowledgeReview(): Promise<void> {
-  await request('/auth/review-ack', okSchema, {});
 }
 
 export async function logoutMax(): Promise<void> {

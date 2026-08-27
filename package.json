@@ -13,6 +13,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
+    "test:bridge": "python -m unittest discover -s bridge/tests -t bridge",
     "check:files": "node scripts/check-file-size.mjs",
     "check:tokens": "node scripts/check-design-tokens.mjs",
     "check:design": "node .layout/lint-strict.mjs && layout-context check src --warnings-as-errors --max-warnings 0",

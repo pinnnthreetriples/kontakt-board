@@ -35,6 +35,19 @@ if (-not $listener) {
   exit 1
 }
 $address = "http://127.0.0.1:$port/"
+
+# Мост к MAX поднимается в своём окне: отправка КП должна работать сразу после
+# запуска приложения, а его сообщения об ошибках оператор должен видеть.
+# Путь берётся в кавычки: Start-Process склеивает аргументы через пробел и сам
+# ничего не кавычит, поэтому без них мост молча не запускается из любой папки с
+# пробелом в имени, включая рабочий стол пользователя с именем из двух слов.
+$bridgeScript = '"' + (Join-Path $PSScriptRoot 'start-bridge.ps1') + '"'
+$bridge = Start-Process powershell.exe -PassThru -ArgumentList @(
+  '-NoProfile', '-ExecutionPolicy', 'Bypass',
+  '-File', $bridgeScript,
+  '-Origin', "http://127.0.0.1:$port"
+)
+
 Write-Host "Kontakt Board is running at $address" -ForegroundColor Green
 Write-Host 'Keep this window open. Press Ctrl+C to stop.'
 Start-Process $address
@@ -84,4 +97,9 @@ try {
 }
 finally {
   $listener.Stop()
+  if ($bridge -and -not $bridge.HasExited) {
+    # /T обязателен: python.exe моста — дочерний процесс своего окна, и без
+    # завершения всего дерева он остался бы висеть на порту 8765.
+    taskkill.exe /PID $bridge.Id /T /F | Out-Null
+  }
 }

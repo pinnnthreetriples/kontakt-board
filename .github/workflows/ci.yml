@@ -25,7 +25,12 @@ jobs:
         with:
           node-version: 24
           cache: npm
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
       - run: npm ci
+      - name: тесты моста MAX
+        run: npm run test:bridge
       - name: quality (typecheck, lint, размеры файлов, токены, дизайн-система, покрытие, сборка)
         run: npm run quality
       - name: aislop, строгий конфиг
