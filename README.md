@@ -19,6 +19,32 @@
 
 ## Запуск
 
+### Установка на новый компьютер
+
+В командной строке от имени администратора:
+
+```
+winget install -e --id Git.Git --silent --accept-package-agreements --accept-source-agreements
+winget install -e --id OpenJS.NodeJS.LTS --silent --accept-package-agreements --accept-source-agreements
+winget install -e --id Python.Python.3.13 --silent --accept-package-agreements --accept-source-agreements
+```
+
+Закройте это окно и откройте новое, иначе установленные программы не появятся в `PATH`. Дальше без прав администратора:
+
+```
+git clone https://github.com/pinnnthreetriples/kontakt-board.git "%USERPROFILE%\kontakt-board"
+cd /d "%USERPROFILE%\kontakt-board"
+SETUP_WINDOWS.cmd
+```
+
+`SETUP_WINDOWS.cmd` ставит зависимости, собирает приложение и запускает его. Делается один раз, дальше программа открывается файлом `START_WINDOWS.cmd`.
+
+Данные при переезде не копируются вместе с файлами, они лежат в браузере:
+
+- контакты, заявки и звонки переносятся через «Настройки → Резервные копии»: на старом компьютере «Скачать копию», на новом «Восстановить»;
+- в MAX нужно войти заново, по QR-коду или по SMS, файл сессии переносить не нужно и не стоит;
+- журнал отправленных КП `%LOCALAPPDATA%\KontaktBoard\send_ledger.sqlite3` копируется отдельно, если важно, чтобы защита от повторной отправки помнила прошлые письма.
+
 ### Готовая сборка на Windows
 
 Распакуйте архив и дважды нажмите `START_WINDOWS.cmd`. Откроется готовая локальная программа; окно запуска оставьте открытым во время работы. Node.js и интернет для этого не нужны.
