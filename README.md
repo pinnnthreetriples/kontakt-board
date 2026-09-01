@@ -21,6 +21,8 @@
 
 ### Установка на новый компьютер
 
+Это установка из исходников, она нужна для доработки программы. Для рабочего компьютера хватит готового архива, см. «Готовая сборка на Windows» ниже.
+
 В командной строке от имени администратора:
 
 ```
@@ -47,7 +49,13 @@ SETUP_WINDOWS.cmd
 
 ### Готовая сборка на Windows
 
-Распакуйте архив и дважды нажмите `START_WINDOWS.cmd`. Откроется готовая локальная программа; окно запуска оставьте открытым во время работы. Node.js и интернет для этого не нужны.
+Готовый архив лежит в [релизах](https://github.com/pinnnthreetriples/kontakt-board/releases/latest). Скачать, распаковать и запустить можно одной командой в `cmd`:
+
+```
+curl -L -o "%TEMP%\kontakt-board.zip" https://github.com/pinnnthreetriples/kontakt-board/releases/latest/download/kontakt-board-windows.zip && tar -xf "%TEMP%\kontakt-board.zip" -C "%USERPROFILE%" && "%USERPROFILE%\kontakt-board\START_WINDOWS.cmd"
+```
+
+Дальше программа открывается файлом `%USERPROFILE%\kontakt-board\START_WINDOWS.cmd`. Окно запуска оставьте открытым во время работы. Node.js, Git и исходники для этого не нужны.
 
 Вместе с приложением в отдельном окне поднимается мост к MAX, без него отправка КП недоступна. Его тоже оставьте открытым. Для моста нужен Python 3.10 или новее, а при самом первом запуске — интернет: он один раз ставит свои библиотеки в `bridge/.venv`. Подробности в [bridge/README.md](bridge/README.md).
 
