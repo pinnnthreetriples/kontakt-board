@@ -1,0 +1,34 @@
+name: релиз
+
+# Готовый архив собирается по тегу: на рабочем компьютере не нужны ни Node.js,
+# ни исходники, только распаковать и запустить START_WINDOWS.cmd.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  windows-zip:
+    name: архив для Windows
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: собрать архив
+        run: |
+          mkdir -p pack/kontakt-board
+          cp -r dist scripts bridge START_WINDOWS.cmd README.md pack/kontakt-board/
+          rm -rf pack/kontakt-board/bridge/tests
+          cd pack && zip -qr ../kontakt-board-windows.zip kontakt-board
+      - name: выложить в релиз
+        run: gh release create "$GITHUB_REF_NAME" kontakt-board-windows.zip --generate-notes
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
