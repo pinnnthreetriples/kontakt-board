@@ -1,8 +1,8 @@
 ﻿# Файл сохранён в UTF-8 с BOM: Windows PowerShell 5.1, которым его запускает
 # START_WINDOWS.cmd, без BOM читает русские строки как ANSI и падает на разборе.
-# Запуск локального моста к MAX. Скрипт сам готовит окружение: создаёт
-# bridge\.venv и ставит в него закреплённые версии из bridge\requirements.txt.
-# Интернет нужен только при первой установке и после изменения requirements.txt.
+# Запуск локального моста к MAX. Скрипт сам готовит окружение и ставит в него
+# закреплённые версии из bridge\requirements.txt. Интернет нужен только при
+# первой установке и после изменения requirements.txt.
 [CmdletBinding()]
 param(
   # Origin страницы приложения. Порт веб-сервера выбирается при запуске, поэтому
@@ -14,7 +14,10 @@ $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
 $bridgeDir = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\bridge'))
-$venvDir = Join-Path $bridgeDir '.venv'
+# Окружение живёт на локальном диске, а не рядом с программой: тогда её можно
+# держать на флешке и носить между компьютерами. Каждый компьютер ставит своё
+# окружение под свой Python, а смена буквы диска ничего не ломает.
+$venvDir = Join-Path $env:LOCALAPPDATA 'KontaktBoard\bridge-venv'
 $venvPython = Join-Path $venvDir 'Scripts\python.exe'
 $requirements = Join-Path $bridgeDir 'requirements.txt'
 $stampFile = Join-Path $venvDir '.requirements-hash'
@@ -78,7 +81,7 @@ if (-not (Test-Path $venvPython)) {
     Stop-WithHint @(
       'Не удалось создать окружение моста в папке:',
       "  $venvDir",
-      'Проверьте, что папку программы можно изменять, и что антивирус не мешает',
+      'Проверьте, что эту папку можно изменять и что антивирус не мешает',
       'создавать в ней файлы, затем запустите приложение заново.'
     )
   }
